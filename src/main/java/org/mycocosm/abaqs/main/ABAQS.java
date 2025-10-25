@@ -64,6 +64,4 @@ public class ABAQS implements BatchRunnableCli {
 			LoggerHelper.log(logger, Level.INFO,"Java Memory: UNLIMITED");
 		}
 	}
-
-	// Test commit
 }
