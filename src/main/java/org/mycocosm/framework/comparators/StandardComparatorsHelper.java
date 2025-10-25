@@ -5,7 +5,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-import org.mycocosm.famework.text.TextHelper;
+import org.mycocosm.framework.text.TextHelper;
 
 public class StandardComparatorsHelper {
 	

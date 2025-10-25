@@ -6,11 +6,11 @@ import java.util.logging.Logger;
 
 import org.apache.commons.cli.CommandLine;
 import org.apache.commons.cli.Options;
-import org.mycocosm.abaqs.famework.cli.BatchRunnableCli;
-import org.mycocosm.abaqs.famework.cli.CliHelper;
-import org.mycocosm.abaqs.famework.cli.CliOption;
-import org.mycocosm.abaqs.famework.logger.LogHelper;
-import org.mycocosm.abaqs.famework.logger.LoggerHelper;
+import org.mycocosm.framework.cli.BatchRunnableCli;
+import org.mycocosm.framework.cli.CliHelper;
+import org.mycocosm.framework.cli.CliOption;
+import org.mycocosm.framework.logger.LogHelper;
+import org.mycocosm.framework.logger.LoggerHelper;
 
 public class ABAQS implements BatchRunnableCli {
 
