@@ -79,7 +79,7 @@ public class ABAQS implements BatchRunnableCli {
 	public static final double DEFAULT_NO_DOMAINS_CDS_MASKED_CUTOFF = 0.20;
 	public static final double DEFAULT_SUSPECTED_DOMAINS_CDS_MASKED_CUTOFF = Double.NaN;
 	public static final int DEFAULT_PROTEIN_LENGTCH_BINNING = 5;
-	
+
 	public static final CliOption<Boolean> VERBOSE = CliOption.optionalBooleanNoArgument("v", "verbose", "produce verbose output");
 	public static final CliOption<Path> VERBOSE_OUTPUT_FOLDER = CliOption.optionalPathWithArgument("vo", "verbose-output-folder", "output folder for verbose output, optional");
 	public static final CliOption<Path> OUTPUT = CliOption.optionalPathWithArgument("o", "output", "output path, optional, default to stdout");
@@ -107,11 +107,11 @@ public class ABAQS implements BatchRunnableCli {
 	public static final CliOption<Path> GENE_CODE_FILE = CliOption.optionalPathWithArgument("igc", "gene-code-input-file", "Gene code input file (gc.prt), if missing internal copy will be used");
 
 	private final Logger logger;
-//	@Inject NcbiGeneCodeCache geneCodeFactory;
+	//	@Inject NcbiGeneCodeCache geneCodeFactory;
 
 	public static final String VERSION = "1.0"; 
 
-	
+
 	private ABAQS(Logger logger) {
 		this.logger = logger;
 	}
@@ -226,7 +226,7 @@ public class ABAQS implements BatchRunnableCli {
 		}
 
 		GeneCode ncbiGeneCode = loadGeneCode(logger,geneCode, geneCodeFile);
-		
+
 		GFF3Data gffData = null;
 		LoggerHelper.log(logger, Level.INFO, "Loading input GFF3 from:'%s'",inputGff3);
 		try (BufferedReader inputReader = FilesHelper.newBufferedReaderOptionallyGzipped(inputGff3)) {
@@ -639,24 +639,28 @@ public class ABAQS implements BatchRunnableCli {
 		Map<String, Set<PfamDomain>> ret = new HashMap<>();
 		final MutableInt totalSkippedLines = new MutableInt();
 		final MutableInt totalAddedDomains = new MutableInt();
-		try (BufferedReader reader = FilesHelper.newBufferedReaderOptionallyGzipped(inputDomains)) {
-			reader.lines().forEach(line->{
-				Matcher m = domainsProteinMapper.matcher(line);
-				if (m.matches()) {
-					String proteinId = m.group("id");
-					String pfam = m.group("domain");
-					ret.computeIfAbsent(proteinId, id->new HashSet<>()).add(PfamDomain.of(pfam));
-					totalAddedDomains.increment();
-					if (verbose) {
-						LoggerHelper.log(logger, Level.INFO, "Added domain '%s' to protein '%s'",pfam,proteinId);
+		if (inputDomains!=null) {
+			try (BufferedReader reader = FilesHelper.newBufferedReaderOptionallyGzipped(inputDomains)) {
+				reader.lines().forEach(line->{
+					Matcher m = domainsProteinMapper.matcher(line);
+					if (m.matches()) {
+						String proteinId = m.group("id");
+						String pfam = m.group("domain");
+						ret.computeIfAbsent(proteinId, id->new HashSet<>()).add(PfamDomain.of(pfam));
+						totalAddedDomains.increment();
+						if (verbose) {
+							LoggerHelper.log(logger, Level.INFO, "Added domain '%s' to protein '%s'",pfam,proteinId);
+						}
+					} else {
+						totalSkippedLines.increment();
+						if (verbose) {
+							LoggerHelper.log(logger, Level.WARNING, "Skipped line in domains file:'%s'",line);
+						}
 					}
-				} else {
-					totalSkippedLines.increment();
-					if (verbose) {
-						LoggerHelper.log(logger, Level.WARNING, "Skipped line in domains file:'%s'",line);
-					}
-				}
-			});
+				});
+			}
+		} else {
+			LoggerHelper.log(logger, Level.WARNING, "No domains file specified");
 		}
 		LoggerHelper.log(logger, Level.INFO, "Total added %,d domains to %,d unique proteins",totalAddedDomains.intValue(), ret.size());
 		if (totalSkippedLines.intValue()>0) {
