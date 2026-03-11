@@ -109,7 +109,7 @@ public class ABAQS implements BatchRunnableCli {
 	private final Logger logger;
 //	@Inject NcbiGeneCodeCache geneCodeFactory;
 
-	public static final String VERSION = "0.1 preview"; 
+	public static final String VERSION = "1.0"; 
 
 	
 	private ABAQS(Logger logger) {
