@@ -29,27 +29,6 @@ public class CliHelper {
 		return ret;
 	}
 
-
-//	public static void run(RunnableCli process, String[] args) throws ParseException {
-//		run(process,process.getClass().getName(),args);
-//	}
-//
-//	@SuppressWarnings("deprecation")
-//	public static void run(RunnableCli process, String command, String[] args) throws ParseException {
-//		System.setProperty(CliHelper.BATCH_PROPERTY, Boolean.TRUE.toString());
-//		Options options = process.buildOptions();
-//		DefaultParser parser = new DefaultParser();
-//		CommandLine cmd=null;
-//		try {
-//			cmd = parser.parse(options, args);
-//		} catch (ParseException e) {
-//			HelpFormatter formatter	= new HelpFormatter();
-//			formatter.printHelp(command, options);
-//			return;
-//		}
-//		process.runBatch(cmd);
-//	}
-
 	public static final Options buildCliOptions(CliOption<?>... options) {
 		return buildCliOptions(null, options);
 	}
@@ -130,29 +109,6 @@ public class CliHelper {
 		boolean defaultValue = TextHelper.nullSafeToBooleanExtended(option.defaultValue,false);
 		return TextHelper.nullSafeToBooleanExtended(getOptionValue(cmd, option),defaultValue);
 	}
-
-//	@SuppressWarnings("deprecation")
-//	public static void runCli(Class<? extends RunnableCli> clasz, String[] args) {
-//		try {
-//			System.setProperty(CliHelper.BATCH_PROPERTY, Boolean.TRUE.toString());
-//
-//			RunnableCli instance = ReflectionHelper.newInstance(clasz);
-//			Options options = instance.buildOptions();
-//			DefaultParser parser = new DefaultParser();
-//			CommandLine cmd=null;
-//			try {
-//				cmd = parser.parse(options, args);
-//			} catch (ParseException e) {
-//				HelpFormatter formatter	= new HelpFormatter();
-//				System.err.println(e.getMessage());
-//				formatter.printHelp("command", options);
-//				return;
-//			}
-//			instance.runBatch(cmd);
-//		} catch (Exception e) {
-//			throw new RuntimeException(e);
-//		}
-//	}
 
 	public static final CommandLine parseCli(RunnableCli process, String[] args) {
 		Options options = process.buildOptions();
