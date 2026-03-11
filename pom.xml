@@ -65,6 +65,14 @@
     <artifactId>commons-cli</artifactId>
     <version>1.10.0</version>
 </dependency>	
+		<dependency>
+			<groupId>org.apache.commons</groupId>
+			<artifactId>commons-lang3</artifactId>
+			<version>3.5</version>
+		</dependency>
+
+
+
 	</dependencies>
   	<properties>
 		<m2e.jaxrs.activation>false</m2e.jaxrs.activation>

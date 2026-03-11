@@ -481,144 +481,144 @@ public class TextHelper {
 			return null;
 		}
 	}
-//
-//	public static final String trimEtherEnd(String line, final char characterToTrim) {
-//		return trimEtherEnd(line, new CharTrimmer(){
-//
-//			@Override
-//			public boolean trim(char c) {
-//				return characterToTrim==c;
-//			}});
-//	}
-//
-//	public static final String trimEtherEnd(String line, CharTrimmer trimmer) {
-//		if (line!=null) {
-//			String trimmedLine = line.trim();
-//			if (trimmedLine.length()>0) {
-//				int indexFrom = 0;
-//				while (indexFrom < trimmedLine.length() && trimmer.trim(trimmedLine.charAt(indexFrom))) {
-//					indexFrom++;
-//				}
-//				int indexTo = trimmedLine.length()-1;
-//				while (indexTo >= indexFrom && trimmer.trim(trimmedLine.charAt(indexTo))) {
-//					indexTo--;
-//				}
-//				trimmedLine = trimmedLine.substring(indexFrom,indexTo+1);
-//				if (!line.equals(trimmedLine)) {
-//					return trimEtherEnd(trimmedLine, trimmer);
-//				} else {
-//					return trimmedLine;
-//				}
-//			} else {
-//				return trimmedLine;
-//			}
-//		} else {
-//			return null;
-//		}
-//	}
-//
-//	public static final String trimEtherEnd(String line, char ... charactersToTrim ) {
-//		if (line!=null) {
-//			if (charactersToTrim!=null && charactersToTrim.length>0) {
-//				String beforeTrimming = line;
-//				String afterTrimming = line;
-//				for (int index=0;index<charactersToTrim.length;index++) {
-//					afterTrimming = trimEtherEnd(afterTrimming, charactersToTrim[index]);
-//				}
-//				while (beforeTrimming.length()!=afterTrimming.length()) {
-//					beforeTrimming = afterTrimming;
-//					for (int index=0;index<charactersToTrim.length;index++) {
-//						afterTrimming = trimEtherEnd(afterTrimming, charactersToTrim[index]);
-//					}
-//				}
-//				return afterTrimming;
-//			} else {
-//				return line.trim();
-//			}
-//		} else {
-//			return null;
-//		}
-//	}
-//
-//
-//	public static final String trimBothEnds(String line, char ... charactersToTrim ) {
-//		if (line!=null) {
-//			String beforeTrimming = line;
-//			String afterTrimming = line;
-//			for (int index=0;index<charactersToTrim.length;index++) {
-//				afterTrimming = trimBothEnds(afterTrimming, charactersToTrim[index]);
-//			}
-//			while (beforeTrimming.length()!=afterTrimming.length()) {
-//				beforeTrimming = afterTrimming;
-//				for (int index=0;index<charactersToTrim.length;index++) {
-//					afterTrimming = trimBothEnds(afterTrimming, charactersToTrim[index]);
-//				}
-//			}
-//			return afterTrimming;
-//		} else {
-//			return null;
-//		}
-//	}
 
-//	private static boolean isaEscapes(char c, char[] escapes) {
-//		for (char cx:escapes) {
-//			if (c==cx) {
-//				return true;
-//			}
-//		}
-//		return false;
-//	}
+	public static final String trimEtherEnd(String line, final char characterToTrim) {
+		return trimEtherEnd(line, new CharTrimmer(){
 
-//	public static final List<String> parseDelimitedLine(String line, Function<Character,Boolean> isDelimiter, char[] escapes) {
-//		List<String> ret = new ArrayList<String>();
-//		if (line!=null) {
-//			List<Integer> splitPositions = new ArrayList<Integer>();
-//			char escapedBy=' ';
-//			boolean isEscaped=false;
-//			for (int index=0;index<line.length();index++) {
-//				char ch = line.charAt(index);
-//				if (isEscaped) {
-//					if (ch==escapedBy) {
-//						isEscaped=false;
-//					}
-//				} else {
-//					if (isaEscapes(ch, escapes)) {
-//						escapedBy=ch;
-//						isEscaped=true;
-//					} else if (isDelimiter.apply(ch)) {
-//						splitPositions.add(index);
-//					}
-//				}
-//			}
-//			if (!splitPositions.isEmpty()) {
-//				int start = 0;
-//				for (int pos:splitPositions) {
-//					ret.add(trimBothEnds(line.substring(start,pos),escapes));
-//					start=pos+1;
-//				}
-//				if (start>line.length()) {
-//					ret.add("");
-//				} else {
-//					ret.add(trimBothEnds(line.substring(start),escapes));
-//				}
-//			} else {
-//				ret.add(trimBothEnds(line ,escapes));
-//			}
-//		}
-//		return ret;
-//	}
-//	private static final char[] DEFAULT_ESCAPES = {'\'','"'};
-//
-//	public static final List<String> parseDelimitedLine(String line, Function<Character,Boolean> isDelimiter) {
-//		return parseDelimitedLine(line,isDelimiter,DEFAULT_ESCAPES);
-//	}
-//	
-//	public static final List<String> parseDelimitedLine(String line, char delimiter) {
-//		return parseDelimitedLine(line,c->delimiter==c,DEFAULT_ESCAPES);
-//	}
-//	public static final List<String> parseDelimitedLine(String line, char delimiter, char[] escapes) {
-//		return parseDelimitedLine(line,c->delimiter==c,escapes);
-//	}
+			@Override
+			public boolean trim(char c) {
+				return characterToTrim==c;
+			}});
+	}
+
+	public static final String trimEtherEnd(String line, CharTrimmer trimmer) {
+		if (line!=null) {
+			String trimmedLine = line.trim();
+			if (trimmedLine.length()>0) {
+				int indexFrom = 0;
+				while (indexFrom < trimmedLine.length() && trimmer.trim(trimmedLine.charAt(indexFrom))) {
+					indexFrom++;
+				}
+				int indexTo = trimmedLine.length()-1;
+				while (indexTo >= indexFrom && trimmer.trim(trimmedLine.charAt(indexTo))) {
+					indexTo--;
+				}
+				trimmedLine = trimmedLine.substring(indexFrom,indexTo+1);
+				if (!line.equals(trimmedLine)) {
+					return trimEtherEnd(trimmedLine, trimmer);
+				} else {
+					return trimmedLine;
+				}
+			} else {
+				return trimmedLine;
+			}
+		} else {
+			return null;
+		}
+	}
+
+	public static final String trimEtherEnd(String line, char ... charactersToTrim ) {
+		if (line!=null) {
+			if (charactersToTrim!=null && charactersToTrim.length>0) {
+				String beforeTrimming = line;
+				String afterTrimming = line;
+				for (int index=0;index<charactersToTrim.length;index++) {
+					afterTrimming = trimEtherEnd(afterTrimming, charactersToTrim[index]);
+				}
+				while (beforeTrimming.length()!=afterTrimming.length()) {
+					beforeTrimming = afterTrimming;
+					for (int index=0;index<charactersToTrim.length;index++) {
+						afterTrimming = trimEtherEnd(afterTrimming, charactersToTrim[index]);
+					}
+				}
+				return afterTrimming;
+			} else {
+				return line.trim();
+			}
+		} else {
+			return null;
+		}
+	}
+
+
+	public static final String trimBothEnds(String line, char ... charactersToTrim ) {
+		if (line!=null) {
+			String beforeTrimming = line;
+			String afterTrimming = line;
+			for (int index=0;index<charactersToTrim.length;index++) {
+				afterTrimming = trimBothEnds(afterTrimming, charactersToTrim[index]);
+			}
+			while (beforeTrimming.length()!=afterTrimming.length()) {
+				beforeTrimming = afterTrimming;
+				for (int index=0;index<charactersToTrim.length;index++) {
+					afterTrimming = trimBothEnds(afterTrimming, charactersToTrim[index]);
+				}
+			}
+			return afterTrimming;
+		} else {
+			return null;
+		}
+	}
+
+	private static boolean isaEscapes(char c, char[] escapes) {
+		for (char cx:escapes) {
+			if (c==cx) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	public static final List<String> parseDelimitedLine(String line, Function<Character,Boolean> isDelimiter, char[] escapes) {
+		List<String> ret = new ArrayList<String>();
+		if (line!=null) {
+			List<Integer> splitPositions = new ArrayList<Integer>();
+			char escapedBy=' ';
+			boolean isEscaped=false;
+			for (int index=0;index<line.length();index++) {
+				char ch = line.charAt(index);
+				if (isEscaped) {
+					if (ch==escapedBy) {
+						isEscaped=false;
+					}
+				} else {
+					if (isaEscapes(ch, escapes)) {
+						escapedBy=ch;
+						isEscaped=true;
+					} else if (isDelimiter.apply(ch)) {
+						splitPositions.add(index);
+					}
+				}
+			}
+			if (!splitPositions.isEmpty()) {
+				int start = 0;
+				for (int pos:splitPositions) {
+					ret.add(trimBothEnds(line.substring(start,pos),escapes));
+					start=pos+1;
+				}
+				if (start>line.length()) {
+					ret.add("");
+				} else {
+					ret.add(trimBothEnds(line.substring(start),escapes));
+				}
+			} else {
+				ret.add(trimBothEnds(line ,escapes));
+			}
+		}
+		return ret;
+	}
+	private static final char[] DEFAULT_ESCAPES = {'\'','"'};
+
+	public static final List<String> parseDelimitedLine(String line, Function<Character,Boolean> isDelimiter) {
+		return parseDelimitedLine(line,isDelimiter,DEFAULT_ESCAPES);
+	}
+	
+	public static final List<String> parseDelimitedLine(String line, char delimiter) {
+		return parseDelimitedLine(line,c->delimiter==c,DEFAULT_ESCAPES);
+	}
+	public static final List<String> parseDelimitedLine(String line, char delimiter, char[] escapes) {
+		return parseDelimitedLine(line,c->delimiter==c,escapes);
+	}
 
 	private static final Pattern NAME_VALUE_PAIR = Pattern.compile("\\s*(\\w+)\\s*=\\s*(.*)");
 	public static final KeyValue<String, String> parseNameValuePair(String pair) {

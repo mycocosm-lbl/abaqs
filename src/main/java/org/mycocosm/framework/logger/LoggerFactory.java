@@ -7,7 +7,7 @@ import java.util.logging.Handler;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
-public class LogHelper {
+public class LoggerFactory {
 
 	
 //	private final static UncaughtExceptionHandler EH = new UncaughtExceptionHandler() {
@@ -93,7 +93,7 @@ public class LogHelper {
 
 	private static Logger setupLog(Logger logger) {
 		Handler logHandler = new PlainHandler();
-		Logger ourLogger = Logger.getLogger(LogHelper.class.getName());
+		Logger ourLogger = Logger.getLogger(LoggerFactory.class.getName());
 		Level level;
 		if (ourLogger!=null) {
 			level = inferLevelFromThis(ourLogger);
@@ -123,7 +123,7 @@ public class LogHelper {
 
 	public static final Logger getAnonymousLogger(Path logFile) {
 		Handler logHandler = new PlainHandler(logFile);
-		Logger ourLogger = Logger.getLogger(LogHelper.class.getName());
+		Logger ourLogger = Logger.getLogger(LoggerFactory.class.getName());
 		Level level;
 		if (ourLogger!=null) {
 			level = inferLevelFromThis(ourLogger);

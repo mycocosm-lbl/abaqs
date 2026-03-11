@@ -595,105 +595,126 @@ public final class CollectionsHelper {
 		};
 	}
 
-//	private static final class BinEntry<T> {
-//		private double binValue;
-//		private T entry;
-//		private BinEntry(double binValue, T entry) {
-//			this.binValue = binValue;
-//			this.entry = entry;
-//		}
-//
-//	}
+	private static final class BinEntry<T> {
+		private double binValue;
+		private T entry;
+		private BinEntry(double binValue, T entry) {
+			this.binValue = binValue;
+			this.entry = entry;
+		}
+	}
 
-//	public static final <T> BinnedCollection<T>[] binCollectionWithPercentOfDataElementsCutoff(Collection<T> data, ToBinValue<T> toBinValue, int numberOfBins, double percentCutOff) {
-//		List<BinEntry<T>> allEntries = toSortedBinentryList(data, toBinValue);
-//		int numberEntriesToIgnore = (int)Math.round((double)data.size() * (1.0-percentCutOff));
-//		int start = numberEntriesToIgnore/2;
-//		int end = allEntries.size()-numberEntriesToIgnore/2;
-//		return binCollectionFromStartToEnd(allEntries, numberOfBins, start, end);
-//	}
-//
-//	public static final <T> BinnedCollection<T>[] binCollectionWithPercentOfDataRangeFromMaxCutoff(Collection<T> data, ToBinValue<T> toBinValue, int numberOfBins, double percentCutOff) {
-//		List<BinEntry<T>> allEntries = toSortedBinentryList(data, toBinValue);
-//		double cutoffValue = allEntries.get(allEntries.size()-1).binValue * percentCutOff;
-//		int numberEntriesToIgnore = 0;
-//		for (;numberEntriesToIgnore<allEntries.size() && allEntries.get(allEntries.size()-1-numberEntriesToIgnore).binValue>cutoffValue;numberEntriesToIgnore++);
-//		int start = 0;
-//		int end = allEntries.size()-numberEntriesToIgnore;
-//		return binCollectionFromStartToEnd(allEntries, numberOfBins, start, end);
-//	}
-//
-//	private static final <T> BinnedCollection<T>[] binCollectionFromStartToEnd(List<BinEntry<T>> allEntries, int numberOfBins, int start, int end) {
-//		double minBinValue = allEntries.get(start).binValue;
-//		double maxBinValue = allEntries.get(end-1).binValue;
-//		double binStep = (maxBinValue - minBinValue) / numberOfBins;
-//		@SuppressWarnings("unchecked")
-//		BinnedCollection<T>[] ret = new BinnedCollection[numberOfBins];
-//		for (int i=0;i<ret.length;i++) {
-//			double startBinValue = minBinValue + i * binStep;
-//			double endBinValue = startBinValue + binStep;
-//			ret[i] = new BinnedCollection<T>(startBinValue, endBinValue);
-//		}
-//		for (int i=start;i<end;i++) {
-//			int binIndex = (int)Math.floor((allEntries.get(i).binValue - minBinValue) / binStep);
-//			if (binIndex>=0 && binIndex<numberOfBins) {
-//				ret[binIndex].add(allEntries.get(i).entry);
-//			} else if (binIndex<0) {
-//				ret[0].add(allEntries.get(i).entry);
-//			} else if (binIndex>=numberOfBins) {
-//				ret[numberOfBins-1].add(allEntries.get(i).entry);
-//			}
-//		}
-//		return ret;
-//	}
-//
-//	public static final <T> BinnedCollection<T>[] binCollectionWithMaxValueCutoff(Collection<T> data, ToBinValue<T> toBinValue, int numberOfBins, double valueCutOff) {
-//		List<BinEntry<T>> allEntries = toSortedBinentryList(data, toBinValue);
-//		double minBinValue = allEntries.get(0).binValue;
-//		if (valueCutOff>allEntries.get(allEntries.size()-1).binValue) {
-//			valueCutOff=allEntries.get(allEntries.size()-1).binValue;
-//		}
-//		double maxBinValue = valueCutOff;
-//		double binStep = (maxBinValue - minBinValue) / numberOfBins;
-//		@SuppressWarnings("unchecked")
-//		BinnedCollection<T>[] ret = new BinnedCollection[numberOfBins+1]; 
-//		for (int i=0;i<numberOfBins;i++) {
-//			double startBinValue = minBinValue + i * binStep;
-//			double endBinValue = startBinValue + binStep;
-//			ret[i] = new BinnedCollection<T>(startBinValue, endBinValue);
-//		}
-//		double startBinValue = valueCutOff;
-//		double endBinValue = allEntries.get(allEntries.size()-1).binValue;;
-//		ret[numberOfBins] = new BinnedCollection<T>(startBinValue, endBinValue);
-//		for (BinEntry<T> e:allEntries) {
-//			int binIndex;
-//			if (e.binValue<valueCutOff) {
-//				binIndex = (int)Math.floor((e.binValue - minBinValue) / binStep);
-//			} else {
-//				binIndex = numberOfBins;
-//			}
-//			if (binIndex>=0 && binIndex<numberOfBins+1) {
-//				ret[binIndex].add(e.entry);
-//			}
-//		}
-//		return ret;
-//	}
-//
-//	private static final <T> List<BinEntry<T>> toSortedBinentryList(Collection<T> data, ToBinValue<T> toBinValue) {
-//		List<BinEntry<T>> ret = new ArrayList<>();
-//		for (T entry:data) {
-//			double binValue = toBinValue.toBinValue(entry);
-//			ret.add(new BinEntry<T>(binValue, entry));
-//		}
-//		Collections.sort(ret, new Comparator<BinEntry<T>>() {
-//
-//			@Override
-//			public int compare(BinEntry<T> o1, BinEntry<T> o2) {
-//				return Double.compare(o1.binValue, o2.binValue);
-//			}
-//		});
-//		return ret;
-//	}
+	public static final <T> BinnedCollection<T>[] binCollectionWithPercentOfDataElementsCutoff(Collection<T> data, ToBinValue<T> toBinValue, int numberOfBins, double percentCutOff) {
+		List<BinEntry<T>> allEntries = toSortedBinEntryList(data, toBinValue);
+		int numberEntriesToIgnore = (int)Math.round((double)data.size() * (1.0-percentCutOff));
+		int start = numberEntriesToIgnore/2;
+		int end = allEntries.size()-numberEntriesToIgnore/2;
+		return binCollectionFromStartToEnd(allEntries, numberOfBins, start, end);
+	}
+
+	public static final <T> BinnedCollection<T>[] binCollectionWithPercentOfDataRangeFromMaxCutoff(Collection<T> data, ToBinValue<T> toBinValue, int numberOfBins, double percentCutOff) {
+		List<BinEntry<T>> allEntries = toSortedBinEntryList(data, toBinValue);
+		double cutoffValue = allEntries.get(allEntries.size()-1).binValue * percentCutOff;
+		int numberEntriesToIgnore = 0;
+		for (;numberEntriesToIgnore<allEntries.size() && allEntries.get(allEntries.size()-1-numberEntriesToIgnore).binValue>cutoffValue;numberEntriesToIgnore++);
+		int start = 0;
+		int end = allEntries.size()-numberEntriesToIgnore;
+		return binCollectionFromStartToEnd(allEntries, numberOfBins, start, end);
+	}
+
+	private static final <T> BinnedCollection<T>[] binCollectionFromStartToEnd(List<BinEntry<T>> allEntries, int numberOfBins, int start, int end) {
+		double minBinValue = allEntries.get(start).binValue;
+		double maxBinValue = allEntries.get(end-1).binValue;
+		double binStep = (maxBinValue - minBinValue) / numberOfBins;
+		@SuppressWarnings("unchecked")
+		BinnedCollection<T>[] ret = new BinnedCollection[numberOfBins];
+		for (int i=0;i<ret.length;i++) {
+			double startBinValue = minBinValue + i * binStep;
+			double endBinValue = startBinValue + binStep;
+			ret[i] = new BinnedCollection<T>(startBinValue, endBinValue);
+		}
+		for (int i=start;i<end;i++) {
+			int binIndex = (int)Math.floor((allEntries.get(i).binValue - minBinValue) / binStep);
+			if (binIndex>=0 && binIndex<numberOfBins) {
+				ret[binIndex].add(allEntries.get(i).entry);
+			} else if (binIndex<0) {
+				ret[0].add(allEntries.get(i).entry);
+			} else if (binIndex>=numberOfBins) {
+				ret[numberOfBins-1].add(allEntries.get(i).entry);
+			}
+		}
+		return ret;
+	}
+
+	public static final <T> BinnedCollection<T>[] binCollectionWithMaxValueCutoff(Collection<T> data, ToBinValue<T> toBinValue, int numberOfBins, double valueCutOff) {
+		List<BinEntry<T>> allEntries = toSortedBinEntryList(data, toBinValue);
+		double minBinValue = allEntries.get(0).binValue;
+		if (valueCutOff>allEntries.get(allEntries.size()-1).binValue) {
+			valueCutOff=allEntries.get(allEntries.size()-1).binValue;
+		}
+		double maxBinValue = valueCutOff;
+		double binStep = (maxBinValue - minBinValue) / numberOfBins;
+		@SuppressWarnings("unchecked")
+		BinnedCollection<T>[] ret = new BinnedCollection[numberOfBins+1]; 
+		for (int i=0;i<numberOfBins;i++) {
+			double startBinValue = minBinValue + i * binStep;
+			double endBinValue = startBinValue + binStep;
+			ret[i] = new BinnedCollection<T>(startBinValue, endBinValue);
+		}
+		double startBinValue = valueCutOff;
+		double endBinValue = allEntries.get(allEntries.size()-1).binValue;
+		ret[numberOfBins] = new BinnedCollection<T>(startBinValue, endBinValue);
+		for (BinEntry<T> e:allEntries) {
+			int binIndex;
+			if (e.binValue<valueCutOff) {
+				binIndex = (int)Math.floor((e.binValue - minBinValue) / binStep);
+			} else {
+				binIndex = numberOfBins;
+			}
+			if (binIndex>=0 && binIndex<numberOfBins+1) {
+				ret[binIndex].add(e.entry);
+			}
+		}
+		return ret;
+	}
+
+	public static final <T> BinnedCollection<T>[] binCollectionWithFixedBinSize(Collection<T> data, ToBinValue<T> toBinValue, double binStep, double minValue, double maxValue) {
+		List<BinEntry<T>> allEntries = toSortedBinEntryList(data, toBinValue);
+		double minBinValue = Double.isNaN(minValue)?allEntries.get(0).binValue:minValue;
+		double maxBinValue = Double.isNaN(maxValue)?allEntries.get(allEntries.size()-1).binValue:maxValue;
+		int numberOfBins = (int) Math.floor((maxBinValue - minBinValue) / binStep);
+		@SuppressWarnings("unchecked")
+		BinnedCollection<T>[] ret = new BinnedCollection[numberOfBins+1]; 
+		for (int i=0;i<ret.length;i++) {
+			double startBinValue = minBinValue + i * binStep;
+			double endBinValue = startBinValue + binStep;
+			ret[i] = new BinnedCollection<T>(startBinValue, endBinValue);
+		}
+		for (BinEntry<T> e:allEntries) {
+			int binIndex;
+			binIndex = (int)Math.floor((e.binValue - minBinValue) / binStep);
+			if (binIndex>=0 && binIndex<ret.length) {
+				ret[binIndex].add(e.entry);
+			}
+		}
+		return ret;
+	}
+
+	private static final <T> List<BinEntry<T>> toSortedBinEntryList(Collection<T> data, ToBinValue<T> toBinValue) {
+		List<BinEntry<T>> ret = new ArrayList<>();
+		for (T entry:data) {
+			double binValue = toBinValue.toBinValue(entry);
+			ret.add(new BinEntry<T>(binValue, entry));
+		}
+		Collections.sort(ret, new Comparator<BinEntry<T>>() {
+
+			@Override
+			public int compare(BinEntry<T> o1, BinEntry<T> o2) {
+				return Double.compare(o1.binValue, o2.binValue);
+			}
+		});
+		return ret;
+	}
 
 	public static final boolean isNullOrEmpty(Collection<?> collection) {
 		return collection==null || collection.isEmpty();
@@ -945,17 +966,17 @@ public final class CollectionsHelper {
 		return (List<C>)EMPTY_LIST;
 	}
 
-//	public static final <T> SetsCompareResult<T> compareTwoSets(Set<T> setA, Set<T> setB) {
-//		return SetsCompareResult.compareTwoSets(setA, setB, p->p);
-//	}
-//
-//	public static final <T,K> SetsCompareResult<T> compareTwoSets(Set<T> setA, Set<T> setB, ToKey<K,T> toKey) {
-//		return SetsCompareResult.compareTwoSets(setA, setB, toKey);
-//	}
-//
-//	public static final <T> SetsCompareResult<T> compareTwoSetsWithStringKeys(Set<T> setA, Set<T> setB, ToKey<String,T> toKey) {
-//		return SetsCompareResult.compareTwoSets(setA, setB, toKey);
-//	}
+	public static final <T> SetsCompareResult<T> compareTwoSets(Set<T> setA, Set<T> setB) {
+		return SetsCompareResult.compareTwoSets(setA, setB, p->p);
+	}
+
+	public static final <T,K> SetsCompareResult<T> compareTwoSets(Set<T> setA, Set<T> setB, ToKey<K,T> toKey) {
+		return SetsCompareResult.compareTwoSets(setA, setB, toKey);
+	}
+
+	public static final <T> SetsCompareResult<T> compareTwoSetsWithStringKeys(Set<T> setA, Set<T> setB, ToKey<String,T> toKey) {
+		return SetsCompareResult.compareTwoSets(setA, setB, toKey);
+	}
 
 	public static final <T> Iterable<T> copyIterable(Collection<T> collection) {
 		return asList(collection);
