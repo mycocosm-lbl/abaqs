@@ -16,3 +16,114 @@ such, the U.S. Government has been granted for itself and others acting on
 its behalf a paid-up, nonexclusive, irrevocable, worldwide license in the
 Software to reproduce, distribute copies to the public, prepare derivative 
 works, and perform publicly and display publicly, and to permit others to do so.
+
+# Build and Installation
+
+## Prerequisites
+You need following prerequisites in order to build and run ABAQS:
+
+* git
+* Java SDK version >=21
+* MAVEN
+
+```
+Example how to install them on Ubuntu Linux
+
+sudo apt update
+
+Install git
+
+apt install git -y
+
+Install OpenJDK: Maven requires Java. Install the default JDK
+
+sudo apt install default-jdk -y
+
+Install Maven
+
+sudo apt install maven -y
+
+Verify Installation
+
+mvn -version
+```
+
+## Building
+
+```
+git clone https://github.com/mycocosm-lbl/abaqs.git
+cd abaqs
+mvn clean package
+java -jar target/abaqs-jar-with-dependencies.jar
+
+```
+
+## Running
+
+You can run ABAQS directly on host computer using Java runtime version >=21
+
+```
+java -jar target/abaqs-jar-with-dependencies.jar 
+Error parsing command line: Missing required option: ig
+usage:
+org.mycocosm.abaqs.main.ABAQS [options]
+options:
+ -fw,--fasta-width <arg>                             fasta output idth, default=70
+ -ib,--busco-data <arg>                              Busco data, like 'C:99.3%[S:98.9%,D:0.4%],F:0.3%,M:0.4%,n:758'
+ -ibf,--busco-data-file <arg>                        Busco data file
+ -id,--input-domains <arg>                           input domains file path
+ -ig,--input-gff <arg>                               input gff3 file path
+ -igc,--gene-code-input-file <arg>                   Gene code input file (gc.prt), if missing internal copy will be used
+ -ilr,--reference-protein-lengths-input-file <arg>   Reference protein length distribution file, if missing internal reference will be used
+ -io,--isoforms-min-overlap <arg>                    Minimum overlap to detect genes isoforms by coding positions, default=0.25
+ -ip,--input-proteins-fasta <arg>                    input proteins fasta file path
+ -is,--input-scaffolds-fasta <arg>                   input scaffolds fasta file path
+ -ise,--suspected-te-input-file <arg>                Suspected transposable elements pfam domains input file, if missing internal list will be used
+ -ite,--te-input-file <arg>                          Transposable elements pfam domains input file, if missing internal list will be used
+ -md,--domains-protein-id-mapper <arg>               mapper for protein id and domains in domains records, default='(?<id>\w+)\t.*\tHMMPfam\t(?<domain>\w+)\t.*'
+ -mf,--masker-function <arg>                         Masker function, default='TO_LOWER_CASE'
+ -mg,--gff3-protein-id-mapper <arg>                  mapper for protein id in gff3 recors, default='attributes:proteinId:.*->{0}' , meaning use proteinId attribute for gene record
+ -mp,--protein-fasta-protein-id-mapper <arg>         mapper for protein id in protein fasta recors, default='.+proteinId\s*=\s*(\d+).*->{1}'
+ -ndc,--no-domain-masked-cutoff <arg>                Masked CDS cutoff for TE detection with no Pfam domains, NaN mean not used, default=0.2
+ -o,--output <arg>                                   output path, optional, default to stdout
+ -og,--output-gff <arg>                              gff3 output path, optional, default to none
+ -plb,--protein-length-binning <arg>                 Protein length distribution binning, default=5
+ -sdc,--suspected-domain-masked-cutoff <arg>         Masked CDS cutoff for TE detection with suspected TE Pfam domains, NaN mean always TE, default=NaN
+ -v,--verbose                                        produce verbose output
+ -vo,--verbose-output-folder <arg>                   output folder for verbose output, optional
+```
+
+## Docker
+
+We also maintain Docker image on the DockerHub so you can run it with docker
+
+```
+docker run mycocosm/abaqs:latest
+Error parsing command line: Missing required option: ig
+usage:
+org.mycocosm.abaqs.main.ABAQS [options]
+options:
+ -fw,--fasta-width <arg>                             fasta output idth, default=70
+ -ib,--busco-data <arg>                              Busco data, like 'C:99.3%[S:98.9%,D:0.4%],F:0.3%,M:0.4%,n:758'
+ -ibf,--busco-data-file <arg>                        Busco data file
+ -id,--input-domains <arg>                           input domains file path
+ -ig,--input-gff <arg>                               input gff3 file path
+ -igc,--gene-code-input-file <arg>                   Gene code input file (gc.prt), if missing internal copy will be used
+ -ilr,--reference-protein-lengths-input-file <arg>   Reference protein length distribution file, if missing internal reference will be used
+ -io,--isoforms-min-overlap <arg>                    Minimum overlap to detect genes isoforms by coding positions, default=0.25
+ -ip,--input-proteins-fasta <arg>                    input proteins fasta file path
+ -is,--input-scaffolds-fasta <arg>                   input scaffolds fasta file path
+ -ise,--suspected-te-input-file <arg>                Suspected transposable elements pfam domains input file, if missing internal list will be used
+ -ite,--te-input-file <arg>                          Transposable elements pfam domains input file, if missing internal list will be used
+ -md,--domains-protein-id-mapper <arg>               mapper for protein id and domains in domains records, default='(?<id>\w+)\t.*\tHMMPfam\t(?<domain>\w+)\t.*'
+ -mf,--masker-function <arg>                         Masker function, default='TO_LOWER_CASE'
+ -mg,--gff3-protein-id-mapper <arg>                  mapper for protein id in gff3 recors, default='attributes:proteinId:.*->{0}' , meaning use proteinId attribute for gene record
+ -mp,--protein-fasta-protein-id-mapper <arg>         mapper for protein id in protein fasta recors, default='.+proteinId\s*=\s*(\d+).*->{1}'
+ -ndc,--no-domain-masked-cutoff <arg>                Masked CDS cutoff for TE detection with no Pfam domains, NaN mean not used, default=0.2
+ -o,--output <arg>                                   output path, optional, default to stdout
+ -og,--output-gff <arg>                              gff3 output path, optional, default to none
+ -plb,--protein-length-binning <arg>                 Protein length distribution binning, default=5
+ -sdc,--suspected-domain-masked-cutoff <arg>         Masked CDS cutoff for TE detection with suspected TE Pfam domains, NaN mean always TE, default=NaN
+ -v,--verbose                                        produce verbose output
+ -vo,--verbose-output-folder <arg>                   output folder for verbose output, optional
+```
