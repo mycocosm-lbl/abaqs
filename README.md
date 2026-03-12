@@ -2,11 +2,12 @@
 Accuracy-Based Annotation Quality Score (ABAQS)
 
 # Abstract
+
 As fungal genome resources continue to expand, estimating the accuracy and completeness of genome annotations (e.g., gene and protein models) becomes essential to ensure quality of downstream analyses and applications. It becomes critical in comparative genomic analysis to select genomes with comparable qualities of assembly and annotation. Without careful scrutiny, inconsistencies in annotation quality can undermine downstream studies.
 
-A robust quality metric should ideally capture multiple dimensions of genome annotation accuracy. However, in practice, most commonly used quality metrics are single-dimensional or consider only a few aspects of annotation quality,  leaving a large space of high-scored but low-quality genome annotations unpenalized. For example, tools like BUSCO (Manni et al. 2021) and CEGMA (Parra, Bradnam, and Korf 2007) evaluate assembly and annotation qualities by detecting conserved gene content in assemblies or predicted proteomes. Such methods solely focus on genome and proteome completeness which is insufficient to generate a full picture of assembly and annotation quality.
+A robust quality metric should ideally capture multiple dimensions of genome annotation accuracy. However, in practice, most commonly used quality metrics are single-dimensional or consider only a few aspects of annotation quality, leaving a large space of high-scored but low-quality genome annotations unpenalized.
 
-To address this gap, we introduce the Accuracy-Based Annotation Quality Score (ABAQS), a comprehensive and minimal-data-driven method to summarize genome annotation quality as a single easily understandable numeric value. While developed primarily using fungal genomes from [MycoCosm](https://mycocosm.jgi.doe.gov), ABAQS is broadly applicable across eukaryotes. ABAQS evaluates multiple factors, including genome completeness, gene model validity, and protein profile accuracy, outperforming metrics like BUSCO and PSAURON. We applied ABAQS to 1700+ eukaryotic genomes and showed its robustness and effectiveness in evaluating genome annotation quality, making it a valuable tool for researchers working with genomic data.
+To address this gap, we introduce the Accuracy-Based Annotation Quality Score (ABAQS), a comprehensive and minimal-data-driven method to summarize genome annotation quality as a single easily understandable numeric value. While developed primarily using fungal genomes from MycoCosm, ABAQS is broadly applicable across eukaryotes. ABAQS evaluates multiple factors, including genome completeness, gene model validity, and protein profile accuracy.
 
 # Build and Installation
 
