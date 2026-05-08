@@ -18,6 +18,7 @@ import java.util.logging.Logger;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
+import java.util.zip.GZIPInputStream;
 
 import org.apache.commons.cli.CommandLine;
 import org.apache.commons.cli.Options;
@@ -490,7 +491,11 @@ public class ABAQS implements BatchRunnableCli {
 			return FilesHelper.newInputStreamOptionallyGzipped(file);
 		} else {
 			LoggerHelper.log(logger, Level.INFO, "Using internal %s",prefix);
-			return IoHelper.openResourceStream(resource);
+			if (FilesHelper.isGzip(resource)) {
+				return new GZIPInputStream(IoHelper.openResourceStream(resource));
+			} else {
+				return IoHelper.openResourceStream(resource);
+			}
 		}
 	}
 
