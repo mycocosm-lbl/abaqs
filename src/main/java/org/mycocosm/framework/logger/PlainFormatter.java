@@ -27,7 +27,7 @@ public class PlainFormatter extends Formatter {
 			buf.append(DELIM);
 			buf.append(shorterName(record.getLoggerName()));
 			buf.append(DELIM);
-			buf.append(record.getLongThreadID());
+			buf.append(record.getThreadID());
 			buf.append(DELIM);
 			String message = record.getMessage();
 			if (message!=null && message.length()>0) {
