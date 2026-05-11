@@ -301,8 +301,10 @@ public class ABAQS implements BatchRunnableCli {
 			final Set<String> uniqueProteinsWithDomains = new HashSet<>();
 			final Set<PfamDomain> uniqueDomains = new HashSet<>();
 			domains.forEach((protein,proteinDomains)->{
-				uniqueProteinsWithDomains.add(protein);
-				uniqueDomains.addAll(proteinDomains);
+				if (proteins.containsKey(protein)) {
+					uniqueProteinsWithDomains.add(protein);
+					uniqueDomains.addAll(proteinDomains);
+				}
 			});
 			resultsOutputWriter.format("Total proteins with domains:\t%d\n",uniqueProteinsWithDomains.size());
 			resultsOutputWriter.format("Total unique domains:\t%d\n",uniqueDomains.size());
@@ -642,6 +644,7 @@ public class ABAQS implements BatchRunnableCli {
 		final MutableInt totalSkippedLines = new MutableInt();
 		final MutableInt totalAddedDomains = new MutableInt();
 		if (inputDomains!=null) {
+			LoggerHelper.log(logger, Level.INFO, "Loading domains from input file:'%s'",inputDomains);
 			try (BufferedReader reader = FilesHelper.newBufferedReaderOptionallyGzipped(inputDomains)) {
 				reader.lines().forEach(line->{
 					Matcher m = domainsProteinMapper.matcher(line);
