@@ -119,6 +119,21 @@ options:
  -v,--verbose                                        produce verbose output
  -vo,--verbose-output-folder <arg>                   output folder for verbose output, optional
 ```
+# Basic calculation of ABAQS requires four pieces of data.
+
+1. -is: The assembly fasta file. This should be softmasked using a repeatmasking program. Ideally, low-complexity repeats are ignored such as by running RepeatMasker with the `-nolow` option.
+1. -ig: Protein models in gff3 format. Each gene feature / protein must have a unique name and it is expected that the name is specified in the attributes field as proteinId. If some other field is used to name the protein, you can use the `-mg` option to specify it. Here are a few lines from an example file.
+```
+##gff-version 3
+##sequence-region scaffold_1 1 1958655
+scaffold_1    fgenesh1_pg    gene    167    2008    0    +    .    ID=gene_2211;feature_name=fgenesh1_pg.1_#_1;Name=gene-jgi|Clapy1|1833732;portal_id=Clapy1;proteinId=1833732;transcriptId=1833838
+scaffold_1    fgenesh1_pg    mRNA    167    2008    .    +    .    ID=mRNA_2211;Parent=gene_2211;Name=jgi|Clapy1|1833732;product=expressed protein;proteinId=1833732;track=FilteredModels1;transcriptId=1833838
+scaffold_1    fgenesh1_pg    exon    167    169    .    +    .    ID=exon_12561;Parent=mRNA_2211
+scaffold_1    fgenesh1_pg    CDS    167    169    .    +    0    ID=CDS_12138;Parent=mRNA_2211
+```
+3. -ibf: BUSCO data file. This is usually called “short_summary.txt” by default when BUSCO is run. Else, you can also provide the BUSCO summary using the `-ib` option.
+3. -id: Pfam data for all the proteins. This is a tab separated text file where the proteinId (or whatever other attribute was specified for the gff3 file using the -mg option) is in column 1 and a pfam domain associated with that protein is in one of the columns such that the immediately preceding column has the text ‘HMMPfam’. If any other format is used, it can be specified using the `-md` option. eg: if you use the default tsv output of Interproscan, then, it uses ‘Pfam’ instead of ‘HMMPfam’. Therefore, we can use `-md '(?<id>\w+)\t.*\tPfam\t(?<domain>\w+)\t.*'`
+If you use a two column file with the proteinId in column 1 and the pfam data in column 2, use `-md '(?<id>\w+)\t(?<domain>\w+)'`
 
 # Copyright Notice
 
