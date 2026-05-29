@@ -85,7 +85,7 @@ options:
  -vo,--verbose-output-folder <arg>                   output folder for verbose output, optional
 ```
 
-##Interpreting the results.
+## Interpreting the results.
 
 After successful completion of the calculation, the software will provide the following data.
 
