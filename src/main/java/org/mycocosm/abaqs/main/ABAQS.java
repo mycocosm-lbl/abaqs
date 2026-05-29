@@ -291,9 +291,9 @@ public class ABAQS implements BatchRunnableCli {
 
 		double abaqsScore = upper / lower;
 
-		LoggerHelper.log(logger, Level.INFO, "Final ABAQS score for '%s':%.4f",inputGff3,abaqsScore);
+		LoggerHelper.log(logger, Level.INFO, "Final ABAQS for '%s':%.4f",inputGff3,abaqsScore);
 		try (PrintWriter resultsOutputWriter = FilesHelper.newPrintWriterOrStdOutput(outputResults)) {
-			resultsOutputWriter.format("Computing ABAQS score from input:\t'%s'\n",inputGff3);
+			resultsOutputWriter.format("Computing ABAQS from input:\t'%s'\n",inputGff3);
 			resultsOutputWriter.format("Total records:\t%d\n",gffData.records.size());
 			resultsOutputWriter.format("Total genes:\t%d\n",gffData.records.stream().filter(Gff3Record::filterForTopLevelRegularRecords).count());
 			resultsOutputWriter.format("Total scaffolds:\t%d\n",gffData.scaffolds.size());
