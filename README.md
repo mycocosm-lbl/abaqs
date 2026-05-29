@@ -131,8 +131,8 @@ scaffold_1    fgenesh1_pg    mRNA    167    2008    .    +    .    ID=mRNA_2211;
 scaffold_1    fgenesh1_pg    exon    167    169    .    +    .    ID=exon_12561;Parent=mRNA_2211
 scaffold_1    fgenesh1_pg    CDS    167    169    .    +    0    ID=CDS_12138;Parent=mRNA_2211
 ```
-1. -ibf: BUSCO data file. This is usually called “short_summary.txt” by default when BUSCO is run. Else, you can also provide the BUSCO summary using the `-ib` option.
-1. -id: Pfam data for all the proteins. This is a tab separated text file where the proteinId (or whatever other attribute was specified for the gff3 file using the -mg option) is in column 1 and a pfam domain associated with that protein is in one of the columns such that the immediately preceding column has the text ‘HMMPfam’. If any other format is used, it can be specified using the `-md` option. eg: if you use the default tsv output of Interproscan, then, it uses ‘Pfam’ instead of ‘HMMPfam’. Therefore, we can use `-md '(?<id>\w+)\t.*\tPfam\t(?<domain>\w+)\t.*'`
+3. -ibf: BUSCO data file. This is usually called “short_summary.txt” by default when BUSCO is run. Else, you can also provide the BUSCO summary using the `-ib` option.
+3. -id: Pfam data for all the proteins. This is a tab separated text file where the proteinId (or whatever other attribute was specified for the gff3 file using the -mg option) is in column 1 and a pfam domain associated with that protein is in one of the columns such that the immediately preceding column has the text ‘HMMPfam’. If any other format is used, it can be specified using the `-md` option. eg: if you use the default tsv output of Interproscan, then, it uses ‘Pfam’ instead of ‘HMMPfam’. Therefore, we can use `-md '(?<id>\w+)\t.*\tPfam\t(?<domain>\w+)\t.*'`
 If you use a two column file with the proteinId in column 1 and the pfam data in column 2, use `-md '(?<id>\w+)\t(?<domain>\w+)'`
 
 # Interpreting the results.
