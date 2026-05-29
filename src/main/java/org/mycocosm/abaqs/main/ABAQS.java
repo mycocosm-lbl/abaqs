@@ -282,11 +282,11 @@ public class ABAQS implements BatchRunnableCli {
 
 		Map<Integer,Double> referenceProteinLengthDitribution = loadReferenceProteinLengthDistribution(logger,referenceProteinLengthDistributionFile);
 		Map<Integer,Double> organismProteinLengthDitribution = loadOrganismProteinLengthDistribution(logger,geneRecords.values().stream().filter(r->!r.detectedTtransposableElement).map(r->r.protein).collect(Collectors.toList()),proteinLengthBinningSize,verbose,verboseOutputFolder);
-		double proteinLengthsDistrbutionFactor = computeProteinLengthDistributionFactor(logger, organismProteinLengthDitribution, referenceProteinLengthDitribution,verbose,verboseOutputFolder);
-		LoggerHelper.log(logger, Level.INFO, "Protein lengths distribution factor: %.4f",proteinLengthsDistrbutionFactor);
+		double proteinLengthsDistributionFactor = computeProteinLengthDistributionFactor(logger, organismProteinLengthDitribution, referenceProteinLengthDitribution,verbose,verboseOutputFolder);
+		LoggerHelper.log(logger, Level.INFO, "Protein lengths distribution factor: %.4f",proteinLengthsDistributionFactor);
 
 		// Final computations
-		double upper = Math.sqrt(proteinLengthsDistrbutionFactor * incompleteGenesFactor);
+		double upper = Math.sqrt(proteinLengthsDistributionFactor * incompleteGenesFactor);
 		double lower = 1.0 + 0.5 * (transposableElementsFactor + isoformsFactor + buscoDuplicatedFactor + 1.0 - buscoCompleteFactor);
 
 		double abaqsScore = upper / lower;
@@ -309,7 +309,7 @@ public class ABAQS implements BatchRunnableCli {
 			resultsOutputWriter.format("Total proteins with domains:\t%d\n",uniqueProteinsWithDomains.size());
 			resultsOutputWriter.format("Total unique domains:\t%d\n",uniqueDomains.size());
 
-			resultsOutputWriter.format("Protein lengths distrbution factor:\t%.4f\n",proteinLengthsDistrbutionFactor);
+			resultsOutputWriter.format("Protein lengths distribution factor:\t%.4f\n",proteinLengthsDistributionFactor);
 			resultsOutputWriter.format("Incomplete genes factor:\t%.4f\n",incompleteGenesFactor);
 			resultsOutputWriter.format("Transposable elements factor:\t%.4f\n",transposableElementsFactor);
 			resultsOutputWriter.format("Isoforms factor:\t%.4f\n",isoformsFactor);
