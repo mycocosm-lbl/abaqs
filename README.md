@@ -85,26 +85,6 @@ options:
  -vo,--verbose-output-folder <arg>                   output folder for verbose output, optional
 ```
 
-## Interpreting the results.
-
-After successful completion of the calculation, the software will provide the following data.
-
-1. Total records:  This is the total number of features in the gff file.
-1. Total genes:  Count of protein coding genes in the gff file.
-1. Total scaffolds:  Number of records in the assembly fasta file.
-1. Total proteins: This is the number of proteins. Ideally, it should be the same as “Total genes” in 2 above. See 10 below for why.
-1. Total proteins with domains: This is the number of proteins with at least one pfam domain as provided in the pfam data file [-id parameter]. Generally, this number should be >30% of the total number of genes. Else, either the pfam prediction was incomplete, or the file provided is not in the correct format. Use the -md parameter to specify the input format of the pfam data file.
-1. Total unique domains:  The number of unique pfams in the pfam data file provided.
-1. Protein lengths distribution factor:  This is the PLD score where 1 is ideal and >0.9 is very good. See the manuscript for how this is calculated. A low number here will significantly reduce the final ABAQS score.
-1. Incomplete genes factor: The proportion of genes that have both a start and stop codon. A low number here will significantly reduce the final ABAQS.
-1. Transposable elements factor: Proportion of TE genes retained in the predicted proteome. See the manuscript for how this is calculated. In short, these are identified using a curated list of known TE PFAM domains. 
-1. Isoforms factor:  The percentage of isoforms in the input data (gff file). This should ideally be zero [See the underlying manuscript for why this is preferred]. Coding sequences (CDSs) that overlap another CDS by more than 25% are classified as isoforms.
-1. BUSCO duplicated factor: Estimation of genome duplication produced by BUSCO.
-1. BUSCO complete factor:  Estimation of genome completeness estimated by BUSCO.
-1. ABAQS score: Final ABAQS on a 0-1 scale.
-
-
-
 ## Docker
 
 We also maintain Docker image on the DockerHub so you can run it with docker
@@ -151,9 +131,27 @@ scaffold_1    fgenesh1_pg    mRNA    167    2008    .    +    .    ID=mRNA_2211;
 scaffold_1    fgenesh1_pg    exon    167    169    .    +    .    ID=exon_12561;Parent=mRNA_2211
 scaffold_1    fgenesh1_pg    CDS    167    169    .    +    0    ID=CDS_12138;Parent=mRNA_2211
 ```
-3. -ibf: BUSCO data file. This is usually called “short_summary.txt” by default when BUSCO is run. Else, you can also provide the BUSCO summary using the `-ib` option.
-3. -id: Pfam data for all the proteins. This is a tab separated text file where the proteinId (or whatever other attribute was specified for the gff3 file using the -mg option) is in column 1 and a pfam domain associated with that protein is in one of the columns such that the immediately preceding column has the text ‘HMMPfam’. If any other format is used, it can be specified using the `-md` option. eg: if you use the default tsv output of Interproscan, then, it uses ‘Pfam’ instead of ‘HMMPfam’. Therefore, we can use `-md '(?<id>\w+)\t.*\tPfam\t(?<domain>\w+)\t.*'`
+1. -ibf: BUSCO data file. This is usually called “short_summary.txt” by default when BUSCO is run. Else, you can also provide the BUSCO summary using the `-ib` option.
+1. -id: Pfam data for all the proteins. This is a tab separated text file where the proteinId (or whatever other attribute was specified for the gff3 file using the -mg option) is in column 1 and a pfam domain associated with that protein is in one of the columns such that the immediately preceding column has the text ‘HMMPfam’. If any other format is used, it can be specified using the `-md` option. eg: if you use the default tsv output of Interproscan, then, it uses ‘Pfam’ instead of ‘HMMPfam’. Therefore, we can use `-md '(?<id>\w+)\t.*\tPfam\t(?<domain>\w+)\t.*'`
 If you use a two column file with the proteinId in column 1 and the pfam data in column 2, use `-md '(?<id>\w+)\t(?<domain>\w+)'`
+
+# Interpreting the results.
+
+After successful completion of the calculation, the software will provide the following data.
+
+1. Total records:  This is the total number of features in the gff file.
+1. Total genes:  Count of protein coding genes in the gff file.
+1. Total scaffolds:  Number of records in the assembly fasta file.
+1. Total proteins: This is the number of proteins. Ideally, it should be the same as “Total genes” in 2 above. See 10 below for why.
+1. Total proteins with domains: This is the number of proteins with at least one pfam domain as provided in the pfam data file [-id parameter]. Generally, this number should be >30% of the total number of genes. Else, either the pfam prediction was incomplete, or the file provided is not in the correct format. Use the -md parameter to specify the input format of the pfam data file.
+1. Total unique domains:  The number of unique pfams in the pfam data file provided.
+1. Protein lengths distribution factor:  This is the PLD score where 1 is ideal and >0.9 is very good. See the manuscript for how this is calculated. A low number here will significantly reduce the final ABAQS score.
+1. Incomplete genes factor: The proportion of genes that have both a start and stop codon. A low number here will significantly reduce the final ABAQS.
+1. Transposable elements factor: Proportion of TE genes retained in the predicted proteome. See the manuscript for how this is calculated. In short, these are identified using a curated list of known TE PFAM domains. 
+1. Isoforms factor:  The percentage of isoforms in the input data (gff file). This should ideally be zero [See the underlying manuscript for why this is preferred]. Coding sequences (CDSs) that overlap another CDS by more than 25% are classified as isoforms.
+1. BUSCO duplicated factor: Estimation of genome duplication produced by BUSCO.
+1. BUSCO complete factor:  Estimation of genome completeness estimated by BUSCO.
+1. ABAQS score: Final ABAQS on a 0-1 scale.
 
 # Copyright Notice
 
