@@ -315,7 +315,7 @@ public class ABAQS implements BatchRunnableCli {
 			resultsOutputWriter.format("Isoforms factor:\t%.4f\n",isoformsFactor);
 			resultsOutputWriter.format("BUSCO duplicated factor:\t%.4f\n",buscoDuplicatedFactor);
 			resultsOutputWriter.format("BUSCO complete factor:\t%.4f\n",buscoCompleteFactor);
-			resultsOutputWriter.format("ABAQS score:\t%.4f\n",abaqsScore);
+			resultsOutputWriter.format("ABAQS:\t%.4f\n",abaqsScore);
 		}
 		LoggerHelper.log(logger, Level.INFO, "All done");
 	}
