@@ -24,4 +24,8 @@ public class GeneRecord {
 		this.portionOfCDSMasked = portionOfCDSMasked;
 		this.detectedTtransposableElement = detectedTtransposableElement;
 	}
+	
+	public static final int sortByProteinLengthDesc(GeneRecord r1, GeneRecord r2) {
+		return Integer.compare(r2.protein.sequence.length(), r1.protein.sequence.length());
+	}
 }

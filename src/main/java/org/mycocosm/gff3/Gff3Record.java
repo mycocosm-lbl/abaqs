@@ -2,7 +2,6 @@ package org.mycocosm.gff3;
 
 import java.io.PrintWriter;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -144,6 +143,10 @@ public class Gff3Record {
 		}
 		return this;
 	}
+	@Override
+	public String toString() {
+		return "Gff3Record: "+catergory + ":"+type+":"+id+" "+seqid+":"+start+"-"+end+" ("+strand+")";
+	}
 	public static final int sortByPositionOnly(Gff3Record r1, Gff3Record r2) {
 		return ComparableHelper.compare2LevelInt(r1.start, r2.start, r1.end, r2.end);
 	}
@@ -161,27 +164,27 @@ public class Gff3Record {
 		}
 	}
 
-	public void print(PrintWriter writer) {
+	protected void print(PrintWriter writer, GffParserSupport gffParserSupport) {
 		switch (catergory) {
 		case regular:
 			writer.printf("%s\t%s\t%s\t%d\t%d\t%s\t%s\t%s\t%s%n",
-					escape(seqid),
-					escape(source),
-					type.name(),
+					GffParserSupport.escape(seqid),
+					GffParserSupport.escape(source),
+					gffParserSupport.fromType(type),
 					start,
 					end,
 					formatScore(),
 					strand.label,
 					formatPhase(),
-					formatAttributes()
+					gffParserSupport.formatAttributes(this)
 					);
-			children.forEach(child->child.print(writer));
+			children.forEach(child->child.print(writer, gffParserSupport));
 			break;
 		case meta:
 			if (meta.value!=null) {
-				writer.printf("##%s %s%n",escape(meta.key),escape(meta.value));
+				writer.printf("##%s %s%n",GffParserSupport.escape(meta.key),GffParserSupport.escape(meta.value));
 			} else {
-				writer.printf("##%s%n",escape(meta.key));
+				writer.printf("##%s%n",GffParserSupport.escape(meta.key));
 			}
 			break;
 		case fasta:
@@ -224,95 +227,8 @@ public class Gff3Record {
 		}
 	}
 
-	/*
-    tab (%09)
-    newline (%0A)
-    carriage return (%0D)
-    % percent (%25)
-    control characters (%00 through %1F, %7F)
 
-In addition, the following characters have reserved meanings in column 9 and must be escaped when used in other contexts:
 
-    ; semicolon (%3B)
-    = equals (%3D)
-    & ampersand (%26)
-    , comma (%2C)
-	 */
-	private static final String escape(String str) {
-		StringBuilder ret = new StringBuilder();
-		if (str!=null) {
-			str.chars().forEach(c->{
-				if (c<=0x1f) {
-					ret.append(String.format("%%%02X",c));
-				} else {
-					switch (c) {
-					case '\t':
-					case '\n':
-					case '\r':
-					case '%':
-					case ';':
-					case '=':
-					case '&':
-					case ',':
-					case 0x7f:
-						ret.append(String.format("%%%02X",c));
-						break;
-					default:
-						ret.append((char)c);
-					}
-				}
-			});
-		}
-		return ret.toString();
-	}
-
-	private static final Pattern ESCAPED = Pattern.compile("%([a-f,\\d]{2,2})",Pattern.CASE_INSENSITIVE);
-	private static final String unEscape(String line) {
-		if (!TextHelper.isNullOrEmpty(line)) {
-			return ESCAPED.matcher(line).replaceAll(result->{
-				return String.valueOf((char)Integer.valueOf(result.group(1),16).intValue());
-			});
-		} else {
-			return line;
-		}
-	}
-
-	private String formatAttribute(String name, String value) {
-		return escape(name)+'='+escape(value);
-	}
-	private String formatAttributes() {
-		List<String> ret = new ArrayList<>();
-		if (id!=null) {
-			ret.add(formatAttribute(ATTRIBUTE_ID, id));
-		}
-		if (parent!=null) {
-			ret.add(formatAttribute(ATTRIBUTE_PARENT, parent.id));
-		}
-		CollectionsHelper.asEntriesStream(attributes,(e1,e2)->e1.getKey().compareToIgnoreCase(e2.getKey())).forEach(entry->{
-			if (!ATTRIBUTE_ID.equals(entry.getKey()) && !ATTRIBUTE_PARENT.equals(entry.getKey())) {
-				ret.add(formatAttribute(entry.getKey(), entry.getValue()));
-			}
-		});
-		return ret.stream().collect(Collectors.joining(";"));
-	}
-	private static final Pattern ATTRIBUTES_SPLIT = Pattern.compile(";");
-	private static final Pattern ATTRIBUTE_PARSE = Pattern.compile("(\\S+)=(.*)");
-	private static final Map<String,String> parseAttributes(String str) {
-		Map<String,String> ret = new HashMap<>();
-		if (!TextHelper.isNullOrEmpty(str)) {
-			Arrays.stream(ATTRIBUTES_SPLIT.split(str)).forEach(attr->{
-				Matcher attrMatcher = ATTRIBUTE_PARSE.matcher(attr);
-				if (attrMatcher.matches()) {
-					String key = unEscape(attrMatcher.group(1));
-					String value = unEscape(attrMatcher.group(2));
-					ret.put(key, value);
-				} else {
-					throw ExceptionsHelper.newRuntimeException("Unable to parse attributes string:'%s', problem is:'%s'", str, attr);
-				}
-			});
-		}
-		return ret;
-	}
 
 	public int length() {
 		return Math.abs(end-start);
@@ -344,15 +260,15 @@ In addition, the following characters have reserved meanings in column 9 and mus
 		str.append("' completed");
 
 		String input = str.toString();
-		String escaped = escape(input);
+		String escaped = GffParserSupport.escape(input);
 		System.out.printf("%s%n",escaped);
-		String output = unEscape(escaped);
+		String output = GffParserSupport.unEscape(escaped);
 		System.out.printf("%s %b%n",output, input.equals(output));
 
 	}
 
 
-	private static final Pattern COMMENT = Pattern.compile("#\\s+.*|#");
+	private static final Pattern COMMENT = Pattern.compile("#[^#].*|#");
 	private static final Pattern META = Pattern.compile("##(\\S+)\\s*(.*)");
 
 	//	static final boolean isComment(String line) {
@@ -371,24 +287,24 @@ In addition, the following characters have reserved meanings in column 9 and mus
 	/*
 	 * Parse line and return record (
 	 */
-	static final Gff3Record fromLine(String line, boolean acceptMissingId) {
+	static final Gff3Record fromLine(String line, boolean acceptMissingId, GffParserSupport parserSupport) {
 		try {
 			if (TextHelper.isNullOrEmpty(line) || COMMENT.matcher(line).matches()) { // simply ignore comments and empty lines
 				return null; 
 			} else {
 				Matcher meta = META.matcher(line); // FASTA also matches META
 				if (meta.matches()) {
-					String key = unEscape(meta.group(1));
-					String value = unEscape(meta.group(2));
+					String key = GffParserSupport.unEscape(meta.group(1));
+					String value = GffParserSupport.unEscape(meta.group(2));
 					switch (key) {
 						case "FASTA": return Gff3Record.fasta();
 						default: return Gff3Record.meta(key, value);
 					}
 				} else {
 					String[] split = TAB.split(line);
-					String seqid = unEscape(split[0]);
-					String source = unEscape(split[1]);
-					Gff3Type type = Gff3Type.valueOfOrNull(split[2]);
+					String seqid = GffParserSupport.unEscape(split[0]);
+					String source = GffParserSupport.unEscape(split[1]);
+					Gff3Type type = parserSupport.toType (split[2]);
 					int start = toIntegerRelaxed(split[3]);
 					int end = toIntegerRelaxed(split[4]);
 					double score = parseScore(split[5]);
@@ -396,11 +312,11 @@ In addition, the following characters have reserved meanings in column 9 and mus
 					int phase = parsePhase(split[7]);
 					Map<String,String> attributes;
 					if (split.length>8) {
-						attributes = parseAttributes(split[8]);
+						attributes = parserSupport.parseAttributes(split[8]);
 					} else {
 						attributes = new HashMap<>();
 					}
-					String id = attributes.get(ATTRIBUTE_ID);
+					String id = parserSupport.getId(type, attributes);
 					if (id!=null) {
 						// set all parents later when all records are parsed to allow forward reference for parents
 						return regular(null, id, seqid, source, type, start, end, score, strand, phase).withAttributes(attributes);
@@ -482,5 +398,25 @@ In addition, the following characters have reserved meanings in column 9 and mus
 
 	public List<SequenceSegment> getSegmentsByType(Gff3Type type) {
 		return getAllByPredicateInclusive(r->type.equals(r.type)).stream().sorted(Gff3Record::sortByPositionOnly).map(r->new SequenceSegment(r.start,r.end)).collect(Collectors.toList());
+	}
+
+	protected Gff3Record cloneWithFilter(Gff3Record parent, Gff3RecordFilter filter) {
+		Gff3Record newRecord = new Gff3Record(catergory, parent, id, seqid, source, type, start, end, score, strand, phase, meta);
+		newRecord.attributes.putAll(attributes);
+		children.forEach(rec->{
+			switch (filter.test(rec)) {
+			case accepted:
+				rec.cloneWithFilter(newRecord, filter); // added to NewRecord in constructor
+				break;
+			case acceptedIfNotEmpty:
+				Gff3Record newChild = rec.cloneWithFilter(null, filter);
+				if (!newChild.children.isEmpty()) {
+					newChild.setParent(newRecord); // another clone here, also cloning attributes 
+				}
+				break;
+			case rejected:
+			}
+		});
+		return newRecord;
 	}
 }

@@ -5,9 +5,10 @@ import java.io.IOException;
 import java.io.PrintWriter;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.function.Function;
+import java.util.Set;
 import java.util.function.Predicate;
 import java.util.logging.Logger;
 
@@ -26,11 +27,14 @@ public class GFF3Data {
 		this.scaffolds = scaffolds;
 	}
 
-	public static final GFF3Data parse(Logger logger, BufferedReader reader) throws IOException {
-		return parse(logger,reader, r->r.id, r->r.attributes.get(Gff3Record.ATTRIBUTE_PARENT),false);
+	public static final GFF3Data parseGff(Logger logger, BufferedReader reader) throws IOException {
+		return parse(logger,reader,false,GffParserSupport.gff);
+	}
+	public static final GFF3Data parseGtf(Logger logger, BufferedReader reader) throws IOException {
+		return parse(logger,reader,false,GffParserSupport.gtf);
 	}
 
-	public static final GFF3Data parse(Logger logger, BufferedReader reader, Function<Gff3Record,String> toKey, Function<Gff3Record,String> toParentKey, boolean acceptMissingId) throws IOException {
+	public static final GFF3Data parse(Logger logger, BufferedReader reader, boolean acceptMissingId, GffParserSupport gffParserSupport) throws IOException {
 		Map<String,Gff3Record> allRecordsByKey = new HashMap<>();
 		List<Gff3Record> allRecords = new ArrayList<>();
 		Map<String,SimpleFastaSequenceWithId> scaffolds = null;
@@ -38,10 +42,10 @@ public class GFF3Data {
 		// Parsing the input file
 		String line = reader.readLine();
 		while (line!=null) {
-			Gff3Record record = Gff3Record.fromLine(line,acceptMissingId);
+			Gff3Record record = Gff3Record.fromLine(line,acceptMissingId, gffParserSupport);
 			if (record!=null) {
 				allRecords.add(record);
-				String key = toKey.apply(record);
+				String key = gffParserSupport.toKey(record);
 				if (key!=null) {
 					allRecordsByKey.put(key, record);
 				}
@@ -55,12 +59,12 @@ public class GFF3Data {
 		// Now set all parents
 		List<Gff3Record> ret = new ArrayList<>();
 		allRecords.forEach(rec->{
-			String parentKey = toParentKey.apply(rec);
+			String parentKey = gffParserSupport.toParentKey(rec);
 			if (parentKey!=null) {
 				Gff3Record parent = allRecordsByKey.get(parentKey);
 				if (parent!=null && !rec.equals(parent)) {
 					Gff3Record childRec = rec.setParent(parent);
-					String childRecKey = toKey.apply(childRec);
+					String childRecKey = gffParserSupport.toKey(childRec);
 					allRecordsByKey.put(childRecKey, childRec); // No need to add it to the results as it will be added together with parent record
 				} else {
 					ret.add(rec);
@@ -84,9 +88,9 @@ public class GFF3Data {
 		return ret;
 	};
 
-	public void printAll(PrintWriter writer, int fastaWidths) {
-		records.forEach(rec->{
-			rec.print(writer);
+	public void printAll(PrintWriter writer, int fastaWidths, GffParserSupport gffParserSupport) {
+		records.stream().filter(gffParserSupport::isAcceptedForOutput).forEach(rec->{
+			rec.print(writer, gffParserSupport);
 			if (Gff3RecordCategory.fasta.equals(rec.catergory)) {
 				scaffolds.forEach((id,scaffold)->{
 					writer.print(scaffold.formatAsFastaWithId(fastaWidths));
@@ -108,6 +112,53 @@ public class GFF3Data {
 	}
 	
 	public GFF3Data replaceScaffolds (Map<String,SimpleFastaSequenceWithId> scaffoldsReplacement) {
-		return new GFF3Data(this.records, scaffoldsReplacement);
+		GFF3Data ret = new GFF3Data(this.records, scaffoldsReplacement);
+		if (scaffoldsReplacement!=null) {
+			List<Gff3Record> fastaRecord = ret.getRecordsByPredicate(r->r.catergory.equals(Gff3RecordCategory.fasta));
+			if (fastaRecord.isEmpty()) {
+				ret.records.add(Gff3Record.fasta());
+			}
+		} else {
+			List<Gff3Record> fastaRecord = ret.getRecordsByPredicate(r->r.catergory.equals(Gff3RecordCategory.fasta));
+			fastaRecord.forEach(rec->ret.records.remove(rec));
+		}
+		return ret;
+	}
+
+	public GFF3Data cloneWithRecordPredicate(Gff3RecordFilter filter) {
+		List<Gff3Record> newRecords = new ArrayList<>();
+		Map<String,SimpleFastaSequenceWithId> newScaffolds;
+		records.forEach(rec->{
+			Gff3RecordFilteringResult filterResult = filter.test(rec);
+			switch (filterResult) {
+			case accepted:
+				newRecords.add(rec.cloneWithFilter(null,filter));
+				break;
+			case acceptedIfNotEmpty:
+				Gff3Record newRec = rec.cloneWithFilter(null,filter);
+				if (!newRec.children.isEmpty()) {
+					newRecords.add(newRec);
+				}
+				break;
+			case rejected: break; 
+			}
+		});
+		if (!CollectionsHelper.isNullOrEmpty(scaffolds)) {
+			Set<String> acceptedScaffoldNames = new HashSet<>();
+			newRecords.forEach(rec->{
+				if (rec.seqid!=null) {
+					acceptedScaffoldNames.add(rec.seqid);
+				}
+			});
+			newScaffolds = new HashMap<>();
+			scaffolds.forEach((name,scaffold)->{
+				if (acceptedScaffoldNames.contains(name)) {
+					newScaffolds.put(name, scaffold);
+				}
+			});
+		} else {
+			newScaffolds = null;
+		}
+		return new GFF3Data(newRecords, newScaffolds);
 	}
 }

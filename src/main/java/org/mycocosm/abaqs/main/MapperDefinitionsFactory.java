@@ -24,6 +24,7 @@ public class MapperDefinitionsFactory {
 			attributeName = split.size()>=2?split.get(1):"proteinId";
 			column = split.size()>=1?split.get(0):"attributes";
 			switch (column) {
+			case "id": // not really a column, refer to the ID value
 			case "seqid":
 			case "source":
 			case "attributes":
@@ -46,6 +47,9 @@ public class MapperDefinitionsFactory {
 					break;
 				case "attributes":
 					transformerInput = rec.attributes.get(attributeName);
+					break;
+				case "id":
+					transformerInput = rec.id;
 					break;
 				default:
 					throw ExceptionsHelper.newRuntimeException("GFF3 column is invalid:'%s'", column);

@@ -10,6 +10,7 @@ import java.nio.file.Path;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -23,6 +24,7 @@ import java.util.zip.GZIPInputStream;
 import org.apache.commons.cli.CommandLine;
 import org.apache.commons.cli.Options;
 import org.apache.commons.cli.ParseException;
+import org.apache.commons.lang3.mutable.MutableBoolean;
 import org.apache.commons.lang3.mutable.MutableDouble;
 import org.apache.commons.lang3.mutable.MutableInt;
 import org.mycocosm.abaqs.compare_tracks.FeaturePair;
@@ -53,12 +55,29 @@ import org.mycocosm.framework.text.PatternHelper;
 import org.mycocosm.framework.text.TextHelper;
 import org.mycocosm.gff3.GFF3Data;
 import org.mycocosm.gff3.Gff3Record;
+import org.mycocosm.gff3.Gff3RecordCategory;
+import org.mycocosm.gff3.Gff3RecordFilter;
+import org.mycocosm.gff3.Gff3RecordFilteringResult;
 import org.mycocosm.gff3.Gff3Type;
+import org.mycocosm.gff3.GffParserSupport;
 import org.mycocosm.ncbi.GeneCode;
 import org.mycocosm.ncbi.GeneCode.TranslationResult;
 import org.mycocosm.ncbi.GeneCodeHelper;
 import org.mycocosm.sequence.SequenceHelper;
 
+/*
+ * IS 2026-09-04
+Update the default PLD to the one attached. DONE
+
+Automatic cleaning of the data. 
+- Can we provide either a list of TE models or a cleaned version without TE proteins?
+- Can we also include a 1 gene per locus cleaning. i.e: select only the longest model.
+
+Can it read gtf? Else, I will write to the reviewer that users can use gffread to convert gtf to gff3.
+
+Use Neucr2 as test case
+
+ */
 
 /*
 --input-gff /scratch/abaqs/Aalte1_ExternalModels_2026-03-05.gff3.gz
@@ -190,9 +209,9 @@ public class ABAQS implements BatchRunnableCli {
 
 	private void processInput(
 			Logger logger, 
-			Path inputGff3,
+			Path inputGff,
 			Path outputResults,
-			Path outputGff3, 
+			Path outputGff, 
 			boolean verbose, 
 			Path verboseOutputFolder,
 			Path inputScaffoldsFasta, 
@@ -224,19 +243,19 @@ public class ABAQS implements BatchRunnableCli {
 		}
 
 		GeneCode ncbiGeneCode = loadGeneCode(logger,geneCode, geneCodeFile);
-
 		GFF3Data gffData = null;
-		LoggerHelper.log(logger, Level.INFO, "Loading input GFF3 from:'%s'",inputGff3);
-		try (BufferedReader inputReader = FilesHelper.newBufferedReaderOptionallyGzipped(inputGff3)) {
-			gffData = GFF3Data.parse(logger, inputReader);
+		GffParserSupport gffInputParserSupport = GffParserSupport.inferParserFromFileName(inputGff);
+		switch (gffInputParserSupport) {
+		case gff:
+			LoggerHelper.log(logger, Level.INFO, "Loading input GFF3 from:'%s'",inputGff);
+			break;
+		case gtf:
+			LoggerHelper.log(logger, Level.INFO, "Loading input GTF from:'%s'",inputGff);
+		}
+		try (BufferedReader inputReader = FilesHelper.newBufferedReaderOptionallyGzipped(inputGff)) {
+			gffData = GFF3Data.parse(logger, inputReader, false, gffInputParserSupport);
 		}
 		LoggerHelper.log(logger, Level.INFO, "Data loaded, total %,d records (%,d genes)",gffData.records.size(),gffData.records.stream().filter(Gff3Record::filterForTopLevelRegularRecords).count());
-		if (outputGff3!=null) {
-			LoggerHelper.log(logger, Level.INFO, "Dumping GFF3 records to:'%s'",outputGff3);
-			try (PrintWriter outputGff3Writer = new PrintWriter(FilesHelper.newOutputStreamOptionallyGzipped(outputGff3)) ) {
-				gffData.printAll(outputGff3Writer, fastaWidth);
-			}
-		}
 		if (inputScaffoldsFasta!=null) {
 			Map<String, SimpleFastaSequenceWithId> scaffolds = loadScaffoldsFasta(logger, inputScaffoldsFasta);
 			gffData = gffData.replaceScaffolds(scaffolds);
@@ -253,15 +272,180 @@ public class ABAQS implements BatchRunnableCli {
 		final Map<String, Set<PfamDomain>> domains = loadDomainsWithIdMapper(logger, inputDomains, domainsProteinMapper, verbose);
 		final Set<PfamDomain> transposableElements = loadTEDomains(logger, "transposable elements", transposableElementsFile, TE_RESOURCE_LOCATION);
 		final Set<PfamDomain> suspectedTransposableElements = loadTEDomains(logger, "suspected transposable elements", suspectedTransposableElementsFile, SUSPECTED_TE_RESOURCE_LOCATION);
-
-		final Map<String,GeneRecord> geneRecords = createGeneRecords(logger, gffData, maskerFunction, proteins, domains, gff3ProteinIdMapper, transposableElements, suspectedTransposableElements, noDomainCDSMaskedCutoff, suspectedDomainCDSMaskedCutoff);
-
-		LoggerHelper.log(logger, Level.INFO, "Total collected %,d mRNA records for analisys",geneRecords.size());
-
-		double isoformsFactor = computeIsoformsFactor(logger, gffData, geneRecords, isoformsMinimumOverlap);
-		LoggerHelper.log(logger, Level.INFO, "Isoforms factor: %.4f",isoformsFactor);
-
 		BuscoData buscoData = loadBuscoData(logger, buscoDataString, buscoDataFile);
+		Map<Integer,Double> referenceProteinLengthDitribution = loadReferenceProteinLengthDistribution(logger,referenceProteinLengthDistributionFile);
+
+		final Map<String /* mRNA.id */,GeneRecord> geneRecords = createGeneRecords(logger, gffData, maskerFunction, proteins, domains, gff3ProteinIdMapper, transposableElements, suspectedTransposableElements, noDomainCDSMaskedCutoff, suspectedDomainCDSMaskedCutoff);
+		if (verbose) {
+			LoggerHelper.log(logger, Level.INFO, "Total collected %,d mRNA records for analisys",geneRecords.size());
+		}
+
+		LoggerHelper.log(logger, Level.INFO, "***** First pass (before filtering) *****");
+
+		final Set<String> uniqueProteinsWithDomains = new HashSet<>();
+		final Set<PfamDomain> uniqueDomains = new HashSet<>();
+		geneRecords.forEach((id,rec)->{
+			if (!CollectionsHelper.isNullOrEmpty(rec.domains)) {
+				uniqueProteinsWithDomains.add(id);
+				rec.domains.forEach(uniqueDomains::add);
+			}
+		});
+
+		ABAQSData scoreBeforeFiltering = doComputation(logger, outputResults, gffData, geneRecords, domains, transposableElements, suspectedTransposableElements, referenceProteinLengthDitribution, buscoData, isoformsMinimumOverlap, proteinLengthBinningSize, verbose, verboseOutputFolder);
+
+		Set<String> mRnaIdToRemove = new HashSet<>();
+		geneRecords.forEach((id,rec)->{
+			if (rec.detectedTtransposableElement) {
+				mRnaIdToRemove.add(id);
+				if (verbose) {
+					LoggerHelper.log(logger, Level.INFO, "mRNA id:'%s' has detected TE, will be removed",id);
+				}
+			}
+		});
+			scoreBeforeFiltering.isoforms.values().forEach(set->set.forEach(rec->{				
+				if (verbose) {
+					LoggerHelper.log(logger, Level.INFO, "mRNA id:'%s' is isoform, will be removed",rec.mRNA.id);
+				}
+				mRnaIdToRemove.add(rec.mRNA.id);
+
+			}));
+		if (verbose) {
+			LoggerHelper.log(logger, Level.INFO, "Total get %,d mRNA records for removal",mRnaIdToRemove.size());
+		}
+
+		GFF3Data filteredGff = gffData.cloneWithRecordPredicate(rec->{
+			if (rec.catergory.equals(Gff3RecordCategory.regular)) {
+				switch (rec.type) {
+				case gene: return Gff3RecordFilteringResult.acceptedIfNotEmpty;
+				case mRNA: 
+					if (mRnaIdToRemove.contains(rec.id)) {
+						return Gff3RecordFilteringResult.rejected;
+					} else {
+						return Gff3RecordFilteringResult.acceptedIfNotEmpty;
+					}
+				default: return Gff3RecordFilteringResult.accepted;
+				}
+			} else {
+				return Gff3RecordFilteringResult.accepted;
+			}
+		});
+
+		final Map<String /* mRNA.id */,GeneRecord> filteredGeneRecords = createGeneRecords(logger, filteredGff, maskerFunction, proteins, domains, gff3ProteinIdMapper, transposableElements, suspectedTransposableElements, noDomainCDSMaskedCutoff, suspectedDomainCDSMaskedCutoff);
+		if (verbose) {
+			LoggerHelper.log(logger, Level.INFO, "Total collected %,d mRNA records for analisys after filtering",geneRecords.size());
+		}
+
+		LoggerHelper.log(logger, Level.INFO, "***** Second pass (after filtering) *****");
+
+		final Set<String> uniqueProteinsWithDomainsAfterFiltering = new HashSet<>();
+		final Set<PfamDomain> uniqueDomainsAfterFiltering = new HashSet<>();
+		filteredGeneRecords.forEach((id,rec)->{
+			if (!CollectionsHelper.isNullOrEmpty(rec.domains)) {
+				uniqueProteinsWithDomainsAfterFiltering.add(id);
+				rec.domains.forEach(uniqueDomainsAfterFiltering::add);
+			}
+		});
+
+		ABAQSData scoreAfterFiltering = doComputation(logger, outputResults, filteredGff, filteredGeneRecords, domains, transposableElements, suspectedTransposableElements, referenceProteinLengthDitribution, buscoData, isoformsMinimumOverlap, proteinLengthBinningSize, verbose, verboseOutputFolder);
+
+		if (outputGff!=null) {
+			GffParserSupport gffOutputParserSupport = GffParserSupport.inferParserFromFileName(outputGff);
+			switch (gffOutputParserSupport) {
+			case gff:
+				LoggerHelper.log(logger, Level.INFO, "Saving after filtering GFF3 records to:'%s'",outputGff);
+				break;
+			case gtf:
+				LoggerHelper.log(logger, Level.INFO, "Saving after filtering GTF records to:'%s'",outputGff);
+			}
+			try (PrintWriter outputGff3Writer = new PrintWriter(FilesHelper.newOutputStreamOptionallyGzipped(outputGff)) ) {
+				// TODO: copy structure excluding TE and isoforms (except the biggest length) and print it. Note that regular genes records that have no mrna children must be deleted
+				filteredGff.printAll(outputGff3Writer, fastaWidth, gffOutputParserSupport);
+			}
+		}
+
+		if (verbose) {
+			LoggerHelper.log(logger, Level.INFO, "ABAQS score for '%s' before filtering:%.4f",inputGff,scoreBeforeFiltering.abaqsScore);
+		}
+		try (PrintWriter resultsOutputWriter = FilesHelper.newPrintWriterOrStdOutput(outputResults)) {
+			resultsOutputWriter.format("ABAQS from input:\t'%s'\nbefore filtering\n\n",inputGff);
+
+			resultsOutputWriter.format("Total records:\t%d\n",gffData.records.size());
+			resultsOutputWriter.format("Total genes:\t%d\n",gffData.records.stream().filter(Gff3Record::filterForTopLevelRegularRecords).count());
+			resultsOutputWriter.format("Total scaffolds:\t%d\n",gffData.scaffolds.size());
+			resultsOutputWriter.format("Total proteins:\t%d\n",geneRecords.size());
+			resultsOutputWriter.format("Total proteins with domains:\t%d\n",uniqueProteinsWithDomains.size());
+			resultsOutputWriter.format("Total unique domains:\t%d\n",uniqueDomains.size());
+			resultsOutputWriter.format("Protein lengths distribution factor:\t%.4f\n",scoreBeforeFiltering.proteinLengthsDistributionFactor);
+			resultsOutputWriter.format("Incomplete genes factor:\t%.4f\n",scoreBeforeFiltering.incompleteGenesFactor);
+			resultsOutputWriter.format("Transposable elements factor:\t%.4f\n",scoreBeforeFiltering.transposableElementsFactor);
+			resultsOutputWriter.format("Isoforms count:\t%,d\n",scoreBeforeFiltering.isoforms.size());
+			resultsOutputWriter.format("Isoforms factor:\t%.4f\n",scoreBeforeFiltering.isoformsFactor);
+			resultsOutputWriter.format("BUSCO duplicated factor:\t%.4f\n",scoreBeforeFiltering.buscoDuplicatedFactor);
+			resultsOutputWriter.format("BUSCO complete factor:\t%.4f\n",scoreBeforeFiltering.buscoCompleteFactor);
+			resultsOutputWriter.format("ABAQS score:\t%.4f\n\n",scoreBeforeFiltering.abaqsScore);
+
+			resultsOutputWriter.format("ABAQS after filtering\n\n",filteredGff);
+			resultsOutputWriter.format("Total records:\t%d\n",filteredGff.records.size());
+			resultsOutputWriter.format("Total genes:\t%d\n",filteredGff.records.stream().filter(Gff3Record::filterForTopLevelRegularRecords).count());
+			resultsOutputWriter.format("Total scaffolds:\t%d\n",filteredGff.scaffolds.size());
+			resultsOutputWriter.format("Total proteins:\t%d\n",filteredGeneRecords.size());
+			resultsOutputWriter.format("Total proteins with domains:\t%d\n",uniqueProteinsWithDomainsAfterFiltering.size());
+			resultsOutputWriter.format("Total unique domains:\t%d\n",uniqueDomainsAfterFiltering.size());
+			resultsOutputWriter.format("Protein lengths distribution factor:\t%.4f\n",scoreAfterFiltering.proteinLengthsDistributionFactor);
+			resultsOutputWriter.format("Incomplete genes factor:\t%.4f\n",scoreAfterFiltering.incompleteGenesFactor);
+			resultsOutputWriter.format("Transposable elements factor:\t%.4f\n",scoreAfterFiltering.transposableElementsFactor);
+			resultsOutputWriter.format("Isoforms count:\t%,d\n",scoreAfterFiltering.isoforms.size());
+			resultsOutputWriter.format("Isoforms factor:\t%.4f\n",scoreAfterFiltering.isoformsFactor);
+			resultsOutputWriter.format("BUSCO duplicated factor:\t%.4f\n",scoreAfterFiltering.buscoDuplicatedFactor);
+			resultsOutputWriter.format("BUSCO complete factor:\t%.4f\n",scoreAfterFiltering.buscoCompleteFactor);
+			resultsOutputWriter.format("ABAQS score:\t%.4f\n",scoreAfterFiltering.abaqsScore);
+		}
+
+		LoggerHelper.log(logger, Level.INFO, "All done");
+	}
+
+
+	private static final Gff3RecordFilter getFilterBymRnaIdsToExclude(final Set<String> mRnaIdsToExclude) {
+		return rec->{
+			if (rec.catergory.equals(Gff3RecordCategory.regular)) {
+				switch (rec.type) {
+				case gene: return Gff3RecordFilteringResult.acceptedIfNotEmpty;
+				case mRNA: 
+					if (mRnaIdsToExclude.contains(rec.id)) {
+						return Gff3RecordFilteringResult.rejected;
+					} else {
+						return Gff3RecordFilteringResult.acceptedIfNotEmpty;
+					}
+				default: return Gff3RecordFilteringResult.accepted;
+				}
+			} else {
+				return Gff3RecordFilteringResult.accepted;
+			}
+		};
+	};
+
+
+	private ABAQSData doComputation(Logger logger, 
+			Path outputResults, 
+			GFF3Data gffData,
+			Map<String /* mRNA.id */,GeneRecord> geneRecords,
+			Map<String, Set<PfamDomain>> domains,
+			Set<PfamDomain> transposableElements,
+			Set<PfamDomain> suspectedTransposableElements,
+			Map<Integer,Double> referenceProteinLengthDitribution,
+			BuscoData buscoData,
+			double isoformsMinimumOverlap,
+			int proteinLengthBinningSize,
+			boolean verbose,
+			Path verboseOutputFolder
+			) throws IOException {
+
+		Map<GeneRecord, Set<GeneRecord>> isoforms = detectIsoforms(logger, gffData, geneRecords, isoformsMinimumOverlap, verbose); 
+		MutableInt totalGenesInIsoforms = new MutableInt();
+		isoforms.forEach((id,recs)->totalGenesInIsoforms.add(recs.size()));
+		LoggerHelper.log(logger, Level.INFO, "Found total %,d isoforms having total %,d genes",isoforms.size(),totalGenesInIsoforms.intValue());
+
+		double isoformsFactor = (double) isoforms.size() / (double)geneRecords.size();
 		double buscoCompleteFactor = Double.NaN;
 		double buscoDuplicatedFactor = Double.NaN;
 		if (buscoData!=null) {
@@ -271,55 +455,12 @@ public class ABAQS implements BatchRunnableCli {
 			buscoCompleteFactor = 1.0;
 			buscoDuplicatedFactor = 0.0;
 		}
-		LoggerHelper.log(logger, Level.INFO, "BUSCO complete factor: %.4f",buscoCompleteFactor);
-		LoggerHelper.log(logger, Level.INFO, "BUSCO duplicated factor: %.4f",buscoDuplicatedFactor);
-
 		double incompleteGenesFactor = computeIncompleteGenesFactor(logger,geneRecords);
-		LoggerHelper.log(logger, Level.INFO, "Incomplete genes factor: %.4f",incompleteGenesFactor);
-
 		double transposableElementsFactor = computeTransposableElementsFactor(logger,geneRecords,transposableElements,suspectedTransposableElements);
-		LoggerHelper.log(logger, Level.INFO, "Transposable elements factor: %.4f",transposableElementsFactor);
-
-		Map<Integer,Double> referenceProteinLengthDitribution = loadReferenceProteinLengthDistribution(logger,referenceProteinLengthDistributionFile);
 		Map<Integer,Double> organismProteinLengthDitribution = loadOrganismProteinLengthDistribution(logger,geneRecords.values().stream().filter(r->!r.detectedTtransposableElement).map(r->r.protein).collect(Collectors.toList()),proteinLengthBinningSize,verbose,verboseOutputFolder);
 		double proteinLengthsDistributionFactor = computeProteinLengthDistributionFactor(logger, organismProteinLengthDitribution, referenceProteinLengthDitribution,verbose,verboseOutputFolder);
-		LoggerHelper.log(logger, Level.INFO, "Protein lengths distribution factor: %.4f",proteinLengthsDistributionFactor);
-
-		// Final computations
-		double upper = Math.sqrt(proteinLengthsDistributionFactor * incompleteGenesFactor);
-		double lower = 1.0 + 0.5 * (transposableElementsFactor + isoformsFactor + buscoDuplicatedFactor + 1.0 - buscoCompleteFactor);
-
-		double abaqsScore = upper / lower;
-
-		LoggerHelper.log(logger, Level.INFO, "Final ABAQS for '%s':%.4f",inputGff3,abaqsScore);
-		try (PrintWriter resultsOutputWriter = FilesHelper.newPrintWriterOrStdOutput(outputResults)) {
-			resultsOutputWriter.format("Computing ABAQS from input:\t'%s'\n",inputGff3);
-			resultsOutputWriter.format("Total records:\t%d\n",gffData.records.size());
-			resultsOutputWriter.format("Total genes:\t%d\n",gffData.records.stream().filter(Gff3Record::filterForTopLevelRegularRecords).count());
-			resultsOutputWriter.format("Total scaffolds:\t%d\n",gffData.scaffolds.size());
-			resultsOutputWriter.format("Total proteins:\t%d\n",proteins.size());
-			final Set<String> uniqueProteinsWithDomains = new HashSet<>();
-			final Set<PfamDomain> uniqueDomains = new HashSet<>();
-			domains.forEach((protein,proteinDomains)->{
-				if (proteins.containsKey(protein)) {
-					uniqueProteinsWithDomains.add(protein);
-					uniqueDomains.addAll(proteinDomains);
-				}
-			});
-			resultsOutputWriter.format("Total proteins with domains:\t%d\n",uniqueProteinsWithDomains.size());
-			resultsOutputWriter.format("Total unique domains:\t%d\n",uniqueDomains.size());
-
-			resultsOutputWriter.format("Protein lengths distribution factor:\t%.4f\n",proteinLengthsDistributionFactor);
-			resultsOutputWriter.format("Incomplete genes factor:\t%.4f\n",incompleteGenesFactor);
-			resultsOutputWriter.format("Transposable elements factor:\t%.4f\n",transposableElementsFactor);
-			resultsOutputWriter.format("Isoforms factor:\t%.4f\n",isoformsFactor);
-			resultsOutputWriter.format("BUSCO duplicated factor:\t%.4f\n",buscoDuplicatedFactor);
-			resultsOutputWriter.format("BUSCO complete factor:\t%.4f\n",buscoCompleteFactor);
-			resultsOutputWriter.format("ABAQS:\t%.4f\n",abaqsScore);
-		}
-		LoggerHelper.log(logger, Level.INFO, "All done");
+		return new ABAQSData(isoformsFactor, buscoCompleteFactor, buscoDuplicatedFactor, incompleteGenesFactor, transposableElementsFactor, proteinLengthsDistributionFactor, isoforms);
 	}
-
 
 	private static final Path GENE_CODE_LOCATION = Path.of("ncbi/gc.prt");
 	private GeneCode loadGeneCode(Logger logger, int geneCode, Path geneCodeFile) throws SocketException, IOException {
@@ -412,7 +553,7 @@ public class ABAQS implements BatchRunnableCli {
 		return ret;
 	}
 
-	private static final Pattern PROTEIN_LENGTH_RECORD = Pattern.compile("(\\d+)\\W+([\\d\\.\\-+e]+)");
+	private static final Pattern PROTEIN_LENGTH_RECORD = Pattern.compile("(\\d+)\\W+([\\d\\.\\-+e]+)", Pattern.CASE_INSENSITIVE);
 	private static final Path REFERENCE_PROTEIN_LENGTH_RESOURCE = Path.of("abaqs/reference-proteins-length-distribution.tsv.gz");
 	private Map<Integer, Double> loadReferenceProteinLengthDistribution(Logger logger, Path referenceProteinLengthDistributionFile) throws IOException {
 		final Map<Integer,Double> distribution = new HashMap<>();
@@ -529,35 +670,121 @@ public class ABAQS implements BatchRunnableCli {
 		}
 	}
 
-	private double computeIsoformsFactor(Logger logger, GFF3Data gff3Data, Map<String,GeneRecord> geneRecords, double isoformsMinimumOverlap) {
-		FeatureTrack track = FeatureTrack.createTrackFromGff3Data(gff3Data, new TrackNameAndType(null, "gff3Data", FeatureTrackType.model), null, null);
-		TrackToTrackMapping selfMapping = FeatureTrack.mapTwoTracksByPositionOverlap(logger,track,track, (p1,p2)->FeaturePair.compareByOverlapDesc(p1,p2));
-		Set<String> gff3IsoformsmRNAIds = new HashSet<>();
-		final MutableInt isoformsCount = new MutableInt();
-		final MutableInt overlappedCount = new MutableInt();
+
+	// by each member of isoforms set 
+	private Map<GeneRecord /* longest protein */, Set<GeneRecord> /* excluding longestProtein */ > detectIsoforms(Logger logger, GFF3Data gff3Data, Map<String,GeneRecord> geneRecords, double isoformsMinimumOverlap, boolean verbose) {
+		Map<String /* mRNA.id */, Set<GeneRecord>> collectedIsoforms = new HashMap<>();
+		// Let do the direct GFF isoforms Detection
+		final MutableInt gffIsoformsCount = new MutableInt();
 		gff3Data.getRecordsByPredicate(r->Gff3Type.gene.equals(r.type)).forEach(gene->{
-			List<Gff3Record> isoformsmRNA = gene.getAllByPredicateInclusive(r->Gff3Type.mRNA.equals(r.type));
-			if (isoformsmRNA.size()>1) {
-				isoformsCount.increment();
-				isoformsmRNA.forEach(mRNA->gff3IsoformsmRNAIds.add(mRNA.id));
+			List<Gff3Record> allRNAs = gene.getAllByPredicateInclusive(r->Gff3Type.mRNA.equals(r.type));
+			if (allRNAs.size()>1) {
+				gffIsoformsCount.increment();
+				Set<GeneRecord> isoforms = new HashSet<>();
+				allRNAs.forEach(mRna->isoforms.add(geneRecords.get(mRna.id)));
+				isoforms.forEach(rec->{ // Adding all of them
+					collectedIsoforms.computeIfAbsent(rec.mRNA.id, key->new HashSet<>()).add(rec);
+				});
 			}
 		});
-		LoggerHelper.log(logger, Level.INFO, "Found %,d GFF3 isoforms",isoformsCount.intValue());
-		selfMapping.mappedPairs.forEach(pair->{
-			if (pair.overlap>isoformsMinimumOverlap) {
-				String mRNAIdA = pair.a.name;
-				String mRNAIdB = pair.b.name;
-				if (!gff3IsoformsmRNAIds.contains(mRNAIdA) || !gff3IsoformsmRNAIds.contains(mRNAIdB)) {
+		if (verbose) {
+			LoggerHelper.log(logger, Level.INFO, "Found %,d GFF3 isoforms",gffIsoformsCount.intValue());
+		}
+		GFF3Data currentData = gff3Data; 
+		MutableBoolean detected = new MutableBoolean();
+		final MutableInt overlappedCount = new MutableInt();
+		do { 
+			// loop until we can detect at least 1 mapped pair
+			// filter all gff records to remove already found mrna that must be removed
+			currentData = currentData.cloneWithRecordPredicate(getFilterBymRnaIdsToExclude(getAllIsoformsmRnaIdExcludingLongest(collectedIsoforms))); 
+			detected.setFalse();
+			FeatureTrack track = FeatureTrack.createTrackFromGff3Data(currentData, new TrackNameAndType(null, "gff3Data", FeatureTrackType.model), null, null);
+			TrackToTrackMapping selfMapping;
+			if (verbose) {
+				selfMapping = FeatureTrack.mapTwoTracksByPositionOverlap(logger,track,track, (p1,p2)->FeaturePair.compareByOverlapDesc(p1,p2));
+			} else {
+				selfMapping = FeatureTrack.mapTwoTracksByPositionOverlap(null,track,track, (p1,p2)->FeaturePair.compareByOverlapDesc(p1,p2));
+			}
+			selfMapping.mappedPairs.forEach(pair->{
+				if (pair.overlap>isoformsMinimumOverlap) {
+					detected.setTrue();
 					overlappedCount.increment();
-					gff3IsoformsmRNAIds.add(mRNAIdA);
-					gff3IsoformsmRNAIds.add(mRNAIdB);
+					String mRNAIdA = pair.a.name;
+					String mRNAIdB = pair.b.name;
+					Set<GeneRecord> byKeyA = collectedIsoforms.get(mRNAIdA);
+					Set<GeneRecord> byKeyB = collectedIsoforms.get(mRNAIdB);
+					if (byKeyA==null && byKeyB==null) {
+						// create new set and add both
+						Set<GeneRecord> isoforms = new HashSet<>();
+						isoforms.add(geneRecords.get(mRNAIdA));
+						isoforms.add(geneRecords.get(mRNAIdB));
+						isoforms.forEach(rec->{
+							collectedIsoforms.computeIfAbsent(rec.mRNA.id, key->new HashSet<>()).add(rec);
+						});
+					} else  if (byKeyA!=null && byKeyB==null) {
+						// add B
+						byKeyA.add(geneRecords.get(mRNAIdB));
+						collectedIsoforms.put(mRNAIdB, byKeyA);
+					} else if (byKeyB!=null && byKeyA==null) {
+						// add A
+						byKeyB.add(geneRecords.get(mRNAIdA));
+						collectedIsoforms.put(mRNAIdA, byKeyB);
+					} else {
+						// both are found - may need to merge isoforms sets
+						if (!byKeyA.equals(byKeyB)) { // if equal - they are the same set, nothing to do
+							// Remove all references in collected isoforms to set B
+							collectedIsoforms.values().removeIf(value -> value == byKeyB);
+							// Add all Records from set B to set A
+							byKeyA.addAll(byKeyB);
+							// Add references to set A by all keys from set B
+							byKeyB.forEach(rec->{
+								collectedIsoforms.put(rec.mRNA.id, byKeyA);
+							});
+						}
+					}
 				}
-			}
+			});
+		} while (detected.booleanValue());
+
+
+		if (verbose) {
+			LoggerHelper.log(logger, Level.INFO, "Found %,d gene pairs overlapped by > %.2f%%",overlappedCount.intValue(),isoformsMinimumOverlap*100.0);
+		}
+		Map<GeneRecord, Set<GeneRecord>> ret = new HashMap<>();
+		collectedIsoforms.values().forEach(isoforms->{
+			IsoformsSet set = selectIsoformsToRemove(isoforms);
+			ret.put(set.longest, set.allBuLongest);
 		});
-		LoggerHelper.log(logger, Level.INFO, "Found %,d genes overlapped by > %.2f%%",overlappedCount.intValue(),isoformsMinimumOverlap*100.0);
-		double ret = (isoformsCount.doubleValue()+overlappedCount.doubleValue())/ (double)geneRecords.size();
 		return ret;
 	}
+
+	private static final Set<String> getAllIsoformsmRnaIdExcludingLongest(Map<String, Set<GeneRecord>> collectedIsoforms) {
+		Set<String> ret = new HashSet<>();
+		collectedIsoforms.values().forEach(rawIsoforms->ret.addAll(selectIsoformsToRemove(rawIsoforms).allBuLongest.stream().map(r->r.mRNA.id).collect(Collectors.toList())));
+		return ret;
+	}
+
+
+	private static final class IsoformsSet {
+		private final GeneRecord longest;
+		private final Set<GeneRecord> allBuLongest;
+		private IsoformsSet(GeneRecord longest, Set<GeneRecord> allBuLongest) {
+			this.longest = longest;
+			this.allBuLongest = allBuLongest;
+		}
+	}
+	// from the set of all isoforms return all but the longest protein
+	private static final IsoformsSet selectIsoformsToRemove(Set<GeneRecord> isoforms) {
+		Set<GeneRecord> allButLongest = new HashSet<>();
+		Iterator<GeneRecord> it = isoforms.stream().sorted(GeneRecord::sortByProteinLengthDesc).iterator();
+		GeneRecord longest = it.next(); // skip the longest
+		while (it.hasNext()) {
+			GeneRecord rec = it.next();
+			allButLongest.add(rec);
+		}
+		return new IsoformsSet(longest, allButLongest);
+	}
+
 
 	private Map<String,GeneRecord> createGeneRecords(Logger logger, GFF3Data gffData, MaskerFunction maskerFunction,  Map<String, SimpleFastaSequenceWithIdAndExtra> effectiveProteins, Map<String, Set<PfamDomain>> domains, Gff3RecordIdMapper gff3ProteinIdMapper, Set<PfamDomain> transposableElements, Set<PfamDomain> suspectedTransposableElements, double noDomainCDSMaskedCutoff, double suspectedDomainCDSMaskedCutoff) {
 		Map<String,GeneRecord> ret = new HashMap<>();
@@ -684,7 +911,11 @@ public class ABAQS implements BatchRunnableCli {
 			if (verbose && aminoacidSequence.hasOverhang()) {
 				LoggerHelper.log(logger, Level.WARNING,"GFF record '%s' have overhang after translation:'%s'",rec.id,aminoacidSequence.overhang);
 			}
-			ret.put(proteinId, new SimpleFastaSequenceWithIdAndExtra(proteinId, rec.id, aminoacidSequence.output, SequenceType.aminoacid));
+			if (proteinId!=null) {
+				ret.put(proteinId, new SimpleFastaSequenceWithIdAndExtra(proteinId, rec.id, aminoacidSequence.output, SequenceType.aminoacid));
+			} else {
+				LoggerHelper.log(logger, Level.WARNING, "Skipped mRNA '%s' protein id mapper return 'null'",rec);
+			}
 		});
 		return ret;
 	}

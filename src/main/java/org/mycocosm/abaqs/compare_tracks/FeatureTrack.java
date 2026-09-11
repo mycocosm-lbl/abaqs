@@ -8,6 +8,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.function.Function;
 import java.util.function.Supplier;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -54,7 +55,7 @@ public class FeatureTrack {
 
 		ProgressTracker tracker = new ProgressTracker(featureTrackA.features.size());
 		PeriodicActivity reporter = new PeriodicActivity(Duration.ofSeconds(15), ()->{
-			LoggerHelper.log(logger,Level.INFO,"Processed %,d(%.2f%%) features, mapped: %,d",tracker.getCounter(),100.0*tracker.getProgress(),mappedPairs.size());
+			LoggerHelper.logIfLoggerExists(logger,Level.INFO,"Processed %,d(%.2f%%) features, mapped: %,d",tracker.getCounter(),100.0*tracker.getProgress(),mappedPairs.size());
 		}).excludingInitialRun();
 
 
@@ -197,6 +198,13 @@ public class FeatureTrack {
 			ret.consumemRNA(mRNA, featureId::incrementAndGet);
 		});
 		ret.createFeaturesIndex();
+		return ret;
+	}
+	public <K> Map<K,FeatureGeneric> getFeaturesIndexLastWin(Function<FeatureGeneric,K> toKey) {
+		Map<K,FeatureGeneric> ret = new HashMap<>();
+		features.forEach(feature->{
+			ret.put(toKey.apply(feature), feature);
+		});
 		return ret;
 	}
 
