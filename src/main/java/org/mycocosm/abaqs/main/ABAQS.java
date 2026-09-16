@@ -90,7 +90,8 @@ public class ABAQS implements BatchRunnableCli {
 	public static final String DEFAULT_GFF3_TO_PROTEIN_ID_MAPPER = "attributes:proteinId:.*->{0}"; 
 	// >jgi|Nitpal1|781|CE780_67 proteinId=781 transcriptId=781
 	public static final String DEFAULT_PROTEIN_FASTA_TO_PROTEIN_ID_MAPPER = ".+proteinId\\s*=\\s*(\\d+).*->{1}"; 
-	public static final Pattern DEFAULT_DOMAINS_MAPPER = Pattern.compile("(?<id>\\w+)\\t.*\\tHMMPfam\\t(?<domain>\\w+)\\t.*", Pattern.CASE_INSENSITIVE);
+	// P51587  14086411a2cdf1c4cba63020e1622579    3418    Pfam    PF09103 BRCA2, oligonucleotide/oligosaccharide-binding, domain 1    2670    2799    7.9E-43 T   15-03-2013
+	public static final Pattern DEFAULT_DOMAINS_MAPPER = Pattern.compile("(?<id>\\w+)\\s+.*\\s+\\w*Pfam\\s+(?<domain>[a-z]+\\d+).*\\s+.*", Pattern.CASE_INSENSITIVE);
 	public static final int DEFAULT_GENE_CODE = GeneCode.DEFAULT_GENE_CODE; 
 	public static final double DEFAULT_ISOFORMS_MIN_OVERLAP = 0.25;
 	public static final MaskerFunction DEFAULT_MASKER_FUNCTION = MaskerFunction.TO_LOWER_CASE;
