@@ -54,6 +54,7 @@ import org.mycocosm.framework.logger.LoggerFactory;
 import org.mycocosm.framework.logger.LoggerHelper;
 import org.mycocosm.framework.text.PatternHelper;
 import org.mycocosm.framework.text.TextHelper;
+import org.mycocosm.framework.utils.ExceptionsHelper;
 import org.mycocosm.gff3.GFF3Data;
 import org.mycocosm.gff3.Gff3Record;
 import org.mycocosm.gff3.Gff3RecordCategory;
@@ -99,35 +100,6 @@ public class ABAQS implements BatchRunnableCli {
 	public static final double DEFAULT_NO_DOMAINS_CDS_MASKED_CUTOFF = 0.20;
 	public static final double DEFAULT_SUSPECTED_DOMAINS_CDS_MASKED_CUTOFF = Double.NaN;
 	public static final int DEFAULT_PROTEIN_LENGTCH_BINNING = 5;
-
-	/*
-java -jar target/abaqs-jar-with-dependencies.jar
-usage options:
- -ig,--input-gff <arg>                               (required) path to the input gff3 or gtf file, type is detected by the file name extention
- -is,--input-scaffolds-fasta <arg>                   (recomended/required) assembly fasta file path, may be ommitted if the gff3 input file has embedded scaffolds fasta
- -ibf,--busco-data-file <arg>                        (recomended) path to the busco data file, using native busco output format
- -ib,--busco-data <arg>                              (recomended if -ibf is not provided) busco data, like 'C:99.3%[S:98.9%,D:0.4%],F:0.3%,M:0.4%,n:758', if ommitted "ideal" BUSCO is assumed
- -md,--domains-protein-id-mapper <arg>               (recomended) mapper for protein id and domains in domains records, default='(?<id>\w+)\t.*\tPfam\t(?<domain>\w+)\t.*'. See --input-domains and --input-proteins-fasta
- -id,--input-domains <arg>                           (recomended if -md is not used) input domains data file path, important note: used together with --domains-protein-id-mapper option to parse the input domains file
- -mg,--gff3-protein-id-mapper <arg>                  (optional) mapper for protein id in gff3 records, default='attributes:proteinId:.*->{0}' , meaning use proteinId attribute for gene record. Used in connection to --input-proteins-fasta
- -mp,--protein-fasta-protein-id-mapper <arg>         (optional) mapper for protein id in protein fasta records, default='.+proteinId\s*=\s*(\d+).*->{1}'
- -ip,--input-proteins-fasta <arg>                    (optional) input proteins fasta file path, if ommitted then ABAQS will translate genes data into aminoacids using provided gene translation table id (--gene-code)
- -igc,--gene-code-input-file <arg>                   (optional) gene code input file (gc.prt), if missing internal copy will be used, see --gene-code
- -ilr,--reference-protein-lengths-input-file <arg>   (optional) reference protein length distribution file, if missing internal reference will be used
- -io,--isoforms-min-overlap <arg>                    (optional) minimum overlap to detect genes isoforms by coding positions, default=0.25
- -ise,--suspected-te-input-file <arg>                (optional) suspected transposable elements pfam domains input file, if missing internal list will be used
- -ite,--te-input-file <arg>                          (optional) transposable elements pfam domains input file, if missing internal list will be used
- -mf,--masker-function <arg>                         (optional) masker function used to detect repeatmasled parts of scaffold sequence, used in TE computation, see --no-domain-masked-cutoff and --suspected-domain-masked-cutoff, default='TO_LOWER_CASE'
- -ndc,--no-domain-masked-cutoff <arg>                (optional) masked CDS cutoff for TE detection with no Pfam domains, NaN mean not used, default=0.2
- -o,--output <arg>                                   (optional) path for the results file, default will print to the console
- -fw,--fasta-width <arg>                             (optional output parameter) fasta output width, default=70. Used ONLY to produce fasta data embedded into the GFF3 output file, see --output-gff
- -og,--output-gff <arg>                              (optional) gff3 or gtf output path, will produce POST-filtering gff or gtdf output file, type detected by the file extention
- -plb,--protein-length-binning <arg>                 (optional) protein length distribution binning, default=5
- -sdc,--suspected-domain-masked-cutoff <arg>         (optional) masked CDS cutoff for TE detection with suspected TE Pfam domains, NaN mean always TE, default=NaN
- -v,--verbose                                        (optional) produce verbose output
- -vo,--verbose-output-folder <arg>                   (optional) output folder for verbose output, will save supplemental data during computation  in that folder
-
-	 */
 
 	public static final CliOption<Path> INPUT_GFF3 = CliOption.requiredPathWithArgument("ig", "input-gff", "(required) path to the input gff3 or gtf file, type is detected by the file name extention");
 	public static final CliOption<Path> INPUT_SCAFFOLFS_FASTA = CliOption.optionalPathWithArgument("is", "input-scaffolds-fasta", "(recomended/required) assembly fasta file path, may be ommitted if the gff3 input file has embedded scaffolds fasta");
@@ -291,6 +263,7 @@ usage options:
 		} else if (!gffData.hasScaffolds()) {
 			throw ErrorExitException.ofMessage("You need to provide ether path to scaffolds fasta or GFF file with #FASTA record");
 		}
+		validateScaffoldsFastaWithGffData(logger, gffData, gffData.scaffolds, verbose);
 
 		Map<String, SimpleFastaSequenceWithIdAndExtra> proteins;
 		if (inputProteinsFasta!=null) { // have proteins to load
@@ -331,13 +304,13 @@ usage options:
 				}
 			}
 		});
-			scoreBeforeFiltering.isoforms.values().forEach(set->set.forEach(rec->{				
-				if (verbose) {
-					LoggerHelper.log(logger, Level.INFO, "mRNA id:'%s' is isoform, will be removed",rec.mRNA.id);
-				}
-				mRnaIdToRemove.add(rec.mRNA.id);
+		scoreBeforeFiltering.isoforms.values().forEach(set->set.forEach(rec->{				
+			if (verbose) {
+				LoggerHelper.log(logger, Level.INFO, "mRNA id:'%s' is isoform, will be removed",rec.mRNA.id);
+			}
+			mRnaIdToRemove.add(rec.mRNA.id);
 
-			}));
+		}));
 		if (verbose) {
 			LoggerHelper.log(logger, Level.INFO, "Total get %,d mRNA records for removal",mRnaIdToRemove.size());
 		}
@@ -434,6 +407,21 @@ usage options:
 	}
 
 
+	private void validateScaffoldsFastaWithGffData(Logger logger, GFF3Data gffData, Map<String, SimpleFastaSequenceWithId> scaffolds, boolean verbose) {
+		MutableBoolean hasErrors = new MutableBoolean(false);
+		gffData.records.forEach(rec->{
+			if (Gff3RecordCategory.regular.equals(rec.catergory)) {
+				if (rec.seqid!=null && !scaffolds.containsKey(rec.seqid)) {
+					LoggerHelper.log(logger, Level.SEVERE, "Scaffold '%s' referenced from gff record [%s] is missing in scaffold fasta file",rec.seqid, rec.id);
+					hasErrors.setTrue();
+				}
+			}
+		});
+		if (hasErrors.booleanValue()) {
+			throw new RuntimeException("Failed validation scaffolds fasta against gff records");
+		}
+	}
+
 	private static final Gff3RecordFilter getFilterBymRnaIdsToExclude(final Set<String> mRnaIdsToExclude) {
 		return rec->{
 			if (rec.catergory.equals(Gff3RecordCategory.regular)) {
@@ -482,7 +470,7 @@ usage options:
 		MutableInt totalGenesInIsoforms = new MutableInt();
 		isoforms.forEach((id,recs)->totalGenesInIsoforms.add(recs.size()));
 		LoggerHelper.log(logger, Level.INFO, "Found total %,d isoform groups having total %,d + %,d = %,d genes",isoforms.size(),isoforms.size(),totalGenesInIsoforms.intValue(),isoforms.size()+totalGenesInIsoforms.intValue());
-		
+
 		double isoformsFactor = (double) isoforms.size() / (double)geneRecords.size();
 		double buscoCompleteFactor = Double.NaN;
 		double buscoDuplicatedFactor = Double.NaN;
@@ -945,16 +933,25 @@ usage options:
 		LoggerHelper.log(logger, Level.INFO,"Translating proteins from gff3 data using gcode '%s(%d)'",geneCode.names[0],geneCode.id);
 		Map<String, SimpleFastaSequenceWithIdAndExtra> ret = new HashMap<>();
 		gffData.getRecordsByPredicate(r->Gff3Type.mRNA.equals(r.type)).forEach(rec->{
-			SimpleFastaSequenceWithId scaffold = gffData.scaffolds.get(rec.seqid);
-			TranslationResult aminoacidSequence = rec.getTranslatedAminoacidSequence(scaffold.sequence,geneCode);
-			String proteinId = gff3ProteinIdMapper.apply(rec);
-			if (verbose && aminoacidSequence.hasOverhang()) {
-				LoggerHelper.log(logger, Level.WARNING,"GFF record '%s' have overhang after translation:'%s'",rec.id,aminoacidSequence.overhang);
-			}
-			if (proteinId!=null) {
-				ret.put(proteinId, new SimpleFastaSequenceWithIdAndExtra(proteinId, rec.id, aminoacidSequence.output, SequenceType.aminoacid));
-			} else {
-				LoggerHelper.log(logger, Level.WARNING, "Skipped mRNA '%s' protein id mapper return 'null'",rec);
+			try {
+				SimpleFastaSequenceWithId scaffold = gffData.scaffolds.get(rec.seqid);
+				if (scaffold!=null) {
+					TranslationResult aminoacidSequence = rec.getTranslatedAminoacidSequence(scaffold.sequence,geneCode);
+					String proteinId = gff3ProteinIdMapper.apply(rec);
+					if (verbose && aminoacidSequence.hasOverhang()) {
+						LoggerHelper.log(logger, Level.WARNING,"GFF record '%s' have overhang after translation:'%s'",rec.id,aminoacidSequence.overhang);
+					}
+					if (proteinId!=null) {
+						ret.put(proteinId, new SimpleFastaSequenceWithIdAndExtra(proteinId, rec.id, aminoacidSequence.output, SequenceType.aminoacid));
+					} else {
+						LoggerHelper.log(logger, Level.WARNING, "Skipped mRNA '%s' protein id mapper return 'null'",rec);
+					}
+				} else {
+					throw ExceptionsHelper.newRuntimeException("Scaffold sequence data not found for mRNA[%s], scaffold:'%s'", rec.id, rec.seqid);
+				}
+			} catch (RuntimeException e) {
+				LoggerHelper.logException(logger, Level.INFO, e, "Error translating proteins for %s",rec.id);
+				throw e;
 			}
 		});
 		return ret;
