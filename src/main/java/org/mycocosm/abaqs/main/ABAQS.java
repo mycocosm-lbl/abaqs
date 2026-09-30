@@ -481,7 +481,7 @@ usage options:
 		}
 		MutableInt totalGenesInIsoforms = new MutableInt();
 		isoforms.forEach((id,recs)->totalGenesInIsoforms.add(recs.size()));
-		LoggerHelper.log(logger, Level.INFO, "Found total %,d isoform groups having total %,d genes",isoforms.size(),totalGenesInIsoforms.intValue());
+		LoggerHelper.log(logger, Level.INFO, "Found total %,d isoform groups having total %,d + %,d = %,d genes",isoforms.size(),isoforms.size(),totalGenesInIsoforms.intValue(),isoforms.size()+totalGenesInIsoforms.intValue());
 		
 		double isoformsFactor = (double) isoforms.size() / (double)geneRecords.size();
 		double buscoCompleteFactor = Double.NaN;
@@ -493,8 +493,8 @@ usage options:
 			buscoCompleteFactor = 1.0;
 			buscoDuplicatedFactor = 0.0;
 		}
-		double incompleteGenesFactor = computeIncompleteGenesFactor(logger,geneRecords);
-		double transposableElementsFactor = computeTransposableElementsFactor(logger,geneRecords,transposableElements,suspectedTransposableElements);
+		double incompleteGenesFactor = computeIncompleteGenesFactor(logger,geneRecords,verbose);
+		double transposableElementsFactor = computeTransposableElementsFactor(logger,geneRecords,transposableElements,suspectedTransposableElements,verbose);
 		Map<Integer,Double> organismProteinLengthDitribution = loadOrganismProteinLengthDistribution(logger,geneRecords.values().stream().filter(r->!r.detectedTtransposableElement).map(r->r.protein).collect(Collectors.toList()),proteinLengthBinningSize,verbose,verboseOutputFolder);
 		double proteinLengthsDistributionFactor = computeProteinLengthDistributionFactor(logger, organismProteinLengthDitribution, referenceProteinLengthDitribution,verbose,verboseOutputFolder);
 		return new ABAQSData(isoformsFactor, buscoCompleteFactor, buscoDuplicatedFactor, incompleteGenesFactor, transposableElementsFactor, proteinLengthsDistributionFactor, isoforms);
@@ -615,11 +615,12 @@ usage options:
 
 	}
 
-	private double computeTransposableElementsFactor(Logger logger, Map<String, GeneRecord> geneRecords, Set<PfamDomain> transposableElements, Set<PfamDomain> suspectedTransposableElements) {
+	private double computeTransposableElementsFactor(Logger logger, Map<String, GeneRecord> geneRecords, Set<PfamDomain> transposableElements, Set<PfamDomain> suspectedTransposableElements, boolean verbose) {
 		final MutableInt teCount = new MutableInt();
 		geneRecords.forEach((id,record)->{
 			if (record.detectedTtransposableElement) {
 				teCount.increment();
+				if (verbose) LoggerHelper.log(logger, Level.INFO, "Found TE: [%s]:%s",record.mRNA.id, record.domains.stream().map(d->d.toString()).collect(Collectors.joining(",")));
 			}
 		});
 		LoggerHelper.log(logger, Level.INFO, "Found %,d TE or suspected TE",teCount.intValue());
@@ -680,7 +681,7 @@ usage options:
 		}
 	}
 
-	private double computeIncompleteGenesFactor(Logger logger, Map<String, GeneRecord> geneRecords) {
+	private double computeIncompleteGenesFactor(Logger logger, Map<String, GeneRecord> geneRecords, boolean verbose) {
 		final MutableInt incompleteGenesCount = new MutableInt();
 
 		geneRecords.forEach((id,record)->{
@@ -688,6 +689,7 @@ usage options:
 			if (proteinSeq.length()>0) {
 				if (proteinSeq.charAt(0)!='M' || proteinSeq.charAt(proteinSeq.length()-1)!='*') {
 					incompleteGenesCount.increment();
+					if (verbose) LoggerHelper.log(logger, Level.INFO, "Incomplete gene: [%s]:'%s'", record.mRNA.id,record.protein.sequence);
 				}
 			}
 		});
