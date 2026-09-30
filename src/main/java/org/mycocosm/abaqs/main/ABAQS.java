@@ -42,6 +42,7 @@ import org.mycocosm.framework.cli.ErrorExitException;
 import org.mycocosm.framework.collections.BinnedCollection;
 import org.mycocosm.framework.collections.CollectionsHelper;
 import org.mycocosm.framework.collections.SetsCompareResult;
+import org.mycocosm.framework.comparators.StandardComparatorsHelper;
 import org.mycocosm.framework.fasta.FastaFile;
 import org.mycocosm.framework.fasta.Scaffold;
 import org.mycocosm.framework.fasta.SequenceType;
@@ -99,30 +100,59 @@ public class ABAQS implements BatchRunnableCli {
 	public static final double DEFAULT_SUSPECTED_DOMAINS_CDS_MASKED_CUTOFF = Double.NaN;
 	public static final int DEFAULT_PROTEIN_LENGTCH_BINNING = 5;
 
+	/*
+java -jar target/abaqs-jar-with-dependencies.jar
+usage options:
+ -ig,--input-gff <arg>                               (required) path to the input gff3 or gtf file, type is detected by the file name extention
+ -is,--input-scaffolds-fasta <arg>                   (recomended/required) assembly fasta file path, may be ommitted if the gff3 input file has embedded scaffolds fasta
+ -ibf,--busco-data-file <arg>                        (recomended) path to the busco data file, using native busco output format
+ -ib,--busco-data <arg>                              (recomended if -ibf is not provided) busco data, like 'C:99.3%[S:98.9%,D:0.4%],F:0.3%,M:0.4%,n:758', if ommitted "ideal" BUSCO is assumed
+ -md,--domains-protein-id-mapper <arg>               (recomended) mapper for protein id and domains in domains records, default='(?<id>\w+)\t.*\tPfam\t(?<domain>\w+)\t.*'. See --input-domains and --input-proteins-fasta
+ -id,--input-domains <arg>                           (recomended if -md is not used) input domains data file path, important note: used together with --domains-protein-id-mapper option to parse the input domains file
+ -mg,--gff3-protein-id-mapper <arg>                  (optional) mapper for protein id in gff3 records, default='attributes:proteinId:.*->{0}' , meaning use proteinId attribute for gene record. Used in connection to --input-proteins-fasta
+ -mp,--protein-fasta-protein-id-mapper <arg>         (optional) mapper for protein id in protein fasta records, default='.+proteinId\s*=\s*(\d+).*->{1}'
+ -ip,--input-proteins-fasta <arg>                    (optional) input proteins fasta file path, if ommitted then ABAQS will translate genes data into aminoacids using provided gene translation table id (--gene-code)
+ -igc,--gene-code-input-file <arg>                   (optional) gene code input file (gc.prt), if missing internal copy will be used, see --gene-code
+ -ilr,--reference-protein-lengths-input-file <arg>   (optional) reference protein length distribution file, if missing internal reference will be used
+ -io,--isoforms-min-overlap <arg>                    (optional) minimum overlap to detect genes isoforms by coding positions, default=0.25
+ -ise,--suspected-te-input-file <arg>                (optional) suspected transposable elements pfam domains input file, if missing internal list will be used
+ -ite,--te-input-file <arg>                          (optional) transposable elements pfam domains input file, if missing internal list will be used
+ -mf,--masker-function <arg>                         (optional) masker function used to detect repeatmasled parts of scaffold sequence, used in TE computation, see --no-domain-masked-cutoff and --suspected-domain-masked-cutoff, default='TO_LOWER_CASE'
+ -ndc,--no-domain-masked-cutoff <arg>                (optional) masked CDS cutoff for TE detection with no Pfam domains, NaN mean not used, default=0.2
+ -o,--output <arg>                                   (optional) path for the results file, default will print to the console
+ -fw,--fasta-width <arg>                             (optional output parameter) fasta output width, default=70. Used ONLY to produce fasta data embedded into the GFF3 output file, see --output-gff
+ -og,--output-gff <arg>                              (optional) gff3 or gtf output path, will produce POST-filtering gff or gtdf output file, type detected by the file extention
+ -plb,--protein-length-binning <arg>                 (optional) protein length distribution binning, default=5
+ -sdc,--suspected-domain-masked-cutoff <arg>         (optional) masked CDS cutoff for TE detection with suspected TE Pfam domains, NaN mean always TE, default=NaN
+ -v,--verbose                                        (optional) produce verbose output
+ -vo,--verbose-output-folder <arg>                   (optional) output folder for verbose output, will save supplemental data during computation  in that folder
+
+	 */
+
+	public static final CliOption<Path> INPUT_GFF3 = CliOption.requiredPathWithArgument("ig", "input-gff", "(required) path to the input gff3 or gtf file, type is detected by the file name extention");
+	public static final CliOption<Path> INPUT_SCAFFOLFS_FASTA = CliOption.optionalPathWithArgument("is", "input-scaffolds-fasta", "(recomended/required) assembly fasta file path, may be ommitted if the gff3 input file has embedded scaffolds fasta");
+	public static final CliOption<Path> BUSCO_DATA_FILE = CliOption.optionalPathWithArgument("ibf", "busco-data-file", "(recomended) path to the busco data file, using native busco output format");
+	public static final CliOption<String> BUSCO_DATA = CliOption.optionalStringWithArgument("ib", "busco-data", "(recomended if -ibf is not provided) busco data, like 'C:99.3%[S:98.9%,D:0.4%],F:0.3%,M:0.4%,n:758', if ommitted \"ideal\" BUSCO is assumed");
+	public static final CliOption<Pattern> DOMAINS_MAPPER = CliOption.optionalPatternWithArgument("md", "domains-protein-id-mapper", "(recomended) mapper for protein id and domains in domains records, default='"+DEFAULT_DOMAINS_MAPPER+"'. See --input-domains and --input-proteins-fasta",DEFAULT_DOMAINS_MAPPER);
+	public static final CliOption<Path> INPUT_DOMAINS = CliOption.optionalPathWithArgument("id", "input-domains", "(recomended if -md is not used) input domains data file path, important note: used together with --domains-protein-id-mapper option to parse the input domains file");
+	public static final CliOption<String> GFF3_PROTEIN_ID_MAPPER = CliOption.optionalStringWithArgument("mg", "gff3-protein-id-mapper", "(optional) mapper for protein id in gff3 records, default='"+DEFAULT_GFF3_TO_PROTEIN_ID_MAPPER+"' , meaning use proteinId attribute for gene record. Used in connection to --input-proteins-fasta",DEFAULT_GFF3_TO_PROTEIN_ID_MAPPER);
+	public static final CliOption<String> PROTEIN_FASTA_PROTEIN_ID_MAPPER = CliOption.optionalStringWithArgument("mp", "protein-fasta-protein-id-mapper", "(optional) mapper for protein id in protein fasta records, default='"+DEFAULT_PROTEIN_FASTA_TO_PROTEIN_ID_MAPPER+"'",DEFAULT_PROTEIN_FASTA_TO_PROTEIN_ID_MAPPER);
+	public static final CliOption<Path> INPUT_PROTEINS_FASTA = CliOption.optionalPathWithArgument("ip", "input-proteins-fasta", "(optional) input proteins fasta file path, if ommitted then ABAQS will translate genes data into aminoacids using provided gene translation table id (--gene-code)");
+	public static final CliOption<Integer> GENE_CODE = CliOption.optionalIntegerWithArgument("g", "gene-code", "(optional), NCBI gene code id to be used for translation, if needed, default="+DEFAULT_GENE_CODE,DEFAULT_GENE_CODE);
+	public static final CliOption<Path> GENE_CODE_FILE = CliOption.optionalPathWithArgument("igc", "gene-code-input-file", "(optional) gene code input file (gc.prt), if missing internal copy will be used, see --gene-code");
+	public static final CliOption<Path> REFERENCE_PROTEINS_LENGTH_INPUT_FILE = CliOption.optionalPathWithArgument("ilr", "reference-protein-lengths-input-file", "(optional) reference protein length distribution file, if missing internal reference will be used");
+	public static final CliOption<Double> ISOFORMS_MIN_OVERLAP = CliOption.optionalDoubleWithArgument("io", "isoforms-min-overlap", "(optional) minimum overlap to detect genes isoforms by coding positions, default="+DEFAULT_ISOFORMS_MIN_OVERLAP,DEFAULT_ISOFORMS_MIN_OVERLAP);
+	public static final CliOption<Path> SUSPECTED_TE_INPUT_FILE = CliOption.optionalPathWithArgument("ise", "suspected-te-input-file", "(optional) suspected transposable elements pfam domains input file, if missing internal list will be used");
+	public static final CliOption<Path> TE_INPUT_FILE = CliOption.optionalPathWithArgument("ite", "te-input-file", "(optional) transposable elements pfam domains input file, if missing internal list will be used");
+	public static final CliOption<String> MASKER_FUNCTION = CliOption.optionalStringWithArgument("mf", "masker-function", "(optional) masker function used to detect repeatmasled parts of scaffold sequence, used in TE computation, see --no-domain-masked-cutoff and --suspected-domain-masked-cutoff, default='"+DEFAULT_MASKER_FUNCTION.id()+"'",DEFAULT_MASKER_FUNCTION.id());
+	public static final CliOption<Double> NO_DOMAINS_CDS_MASKED_CUTOFF = CliOption.optionalDoubleWithArgument("ndc", "no-domain-masked-cutoff", "(optional) masked CDS cutoff for TE detection with no Pfam domains, NaN mean not used, default="+DEFAULT_NO_DOMAINS_CDS_MASKED_CUTOFF,DEFAULT_NO_DOMAINS_CDS_MASKED_CUTOFF);
+	public static final CliOption<Path> OUTPUT_RESULTS = CliOption.optionalPathWithArgument("o", "output", "(optional) path for the results file, default will print to the console");
+	public static final CliOption<Integer> FASTA_WIDTH = CliOption.optionalIntegerWithArgument("fw", "fasta-width", "(optional output parameter) fasta output width, default="+SequenceHelper.DEFAULT_FASTA_WIDTH+". Used ONLY to produce fasta data embedded into the GFF3 output file, see --output-gff",SequenceHelper.DEFAULT_FASTA_WIDTH);
+	public static final CliOption<Path> OUTPUT_GFF3 = CliOption.optionalPathWithArgument("og", "output-gff", "(optional) gff3 or gtf output path, will produce POST-filtering gff or gtdf output file, type detected by the file extention");
+	public static final CliOption<Integer> PROTEIN_LENGTCH_BINNING = CliOption.optionalIntegerWithArgument("plb", "protein-length-binning", "(optional) protein length distribution binning, default="+DEFAULT_PROTEIN_LENGTCH_BINNING,DEFAULT_PROTEIN_LENGTCH_BINNING);
+	public static final CliOption<Double> SUSPECTED_DOMAINS_CDS_MASKED_CUTOFF = CliOption.optionalDoubleWithArgument("sdc", "suspected-domain-masked-cutoff", "(optional) masked CDS cutoff for TE detection with suspected TE Pfam domains, NaN mean always TE, default="+DEFAULT_SUSPECTED_DOMAINS_CDS_MASKED_CUTOFF,DEFAULT_SUSPECTED_DOMAINS_CDS_MASKED_CUTOFF);
 	public static final CliOption<Boolean> VERBOSE = CliOption.optionalBooleanNoArgument("v", "verbose", "(optional) produce verbose output");
 	public static final CliOption<Path> VERBOSE_OUTPUT_FOLDER = CliOption.optionalPathWithArgument("vo", "verbose-output-folder", "(optional) output folder for verbose output, will save supplemental data during computation  in that folder");
-	public static final CliOption<Path> OUTPUT_RESULTS = CliOption.optionalPathWithArgument("o", "output", "(optional) path for the results file, default will print to the console");
-	public static final CliOption<Path> INPUT_GFF3 = CliOption.requiredPathWithArgument("ig", "input-gff", "(must) path to the input gff3 or gtf file, type is detected by the file name extention");
-	public static final CliOption<Path> INPUT_SCAFFOLFS_FASTA = CliOption.optionalPathWithArgument("is", "input-scaffolds-fasta", "(may) input scaffolds fasta file path, may be ommitted in the gff3 input file has embedded scaffolds fasta");
-	public static final CliOption<Path> INPUT_PROTEINS_FASTA = CliOption.optionalPathWithArgument("ip", "input-proteins-fasta", "(may) input proteins fasta file path, if ommitted then ABAQS will translate genes data into aminoacids using provided gene translation table id (--gene-code)");
-	public static final CliOption<Path> INPUT_DOMAINS = CliOption.optionalPathWithArgument("id", "input-domains", "(may) input domains data file path, important note: used together with --domains-protein-id-mapper option to parse the input domains file");
-	public static final CliOption<Path> OUTPUT_GFF3 = CliOption.optionalPathWithArgument("og", "output-gff", "(optional) gff3 or gtf output path, will produce POST-filtering gff or gtdf output file, type detected by the file extention");
-	public static final CliOption<Integer> FASTA_WIDTH = CliOption.optionalIntegerWithArgument("fw", "fasta-width", "(optional) fasta output width, default="+SequenceHelper.DEFAULT_FASTA_WIDTH+". Used ONLY to produce fasta data embedded into the GFF3 output file, see --output-gff",SequenceHelper.DEFAULT_FASTA_WIDTH);
-	public static final CliOption<String> GFF3_PROTEIN_ID_MAPPER = CliOption.optionalStringWithArgument("mg", "gff3-protein-id-mapper", "(may) mapper for protein id in gff3 records, default='"+DEFAULT_GFF3_TO_PROTEIN_ID_MAPPER+"' , meaning use proteinId attribute for gene record. Used in connection to --input-proteins-fasta",DEFAULT_GFF3_TO_PROTEIN_ID_MAPPER);
-	public static final CliOption<String> PROTEIN_FASTA_PROTEIN_ID_MAPPER = CliOption.optionalStringWithArgument("mp", "protein-fasta-protein-id-mapper", "(may) mapper for protein id in protein fasta records, default='"+DEFAULT_PROTEIN_FASTA_TO_PROTEIN_ID_MAPPER+"'",DEFAULT_PROTEIN_FASTA_TO_PROTEIN_ID_MAPPER);
-	public static final CliOption<Pattern> DOMAINS_MAPPER = CliOption.optionalPatternWithArgument("md", "domains-protein-id-mapper", "(may) mapper for protein id and domains in domains records, default='"+DEFAULT_DOMAINS_MAPPER+"'. See --input-domains and --input-proteins-fasta",DEFAULT_DOMAINS_MAPPER);
-	public static final CliOption<Integer> GENE_CODE = CliOption.optionalIntegerWithArgument("g", "gene-code", "(optional), NCBI gene code id to be used for translation, if needed, default="+DEFAULT_GENE_CODE,DEFAULT_GENE_CODE);
-	public static final CliOption<Double> ISOFORMS_MIN_OVERLAP = CliOption.optionalDoubleWithArgument("io", "isoforms-min-overlap", "(optional) minimum overlap to detect genes isoforms by coding positions, default="+DEFAULT_ISOFORMS_MIN_OVERLAP,DEFAULT_ISOFORMS_MIN_OVERLAP);
-	public static final CliOption<String> BUSCO_DATA = CliOption.optionalStringWithArgument("ib", "busco-data", "(optional) busco data, like 'C:99.3%[S:98.9%,D:0.4%],F:0.3%,M:0.4%,n:758', if ommitted \"ideal\" BUSCO is assumed");
-	public static final CliOption<Path> BUSCO_DATA_FILE = CliOption.optionalPathWithArgument("ibf", "busco-data-file", "(optional) path to the busco data file, using native busco output format");
-	public static final CliOption<String> MASKER_FUNCTION = CliOption.optionalStringWithArgument("mf", "masker-function", "(optional) masker function used to detect repeatmasled parts of scaffold sequence, used in TE computation, see --no-domain-masked-cutoff and --suspected-domain-masked-cutoff, default='"+DEFAULT_MASKER_FUNCTION.id()+"'",DEFAULT_MASKER_FUNCTION.id());
-	public static final CliOption<Path> TE_INPUT_FILE = CliOption.optionalPathWithArgument("ite", "te-input-file", "(optional) transposable elements pfam domains input file, if missing internal list will be used");
-	public static final CliOption<Path> SUSPECTED_TE_INPUT_FILE = CliOption.optionalPathWithArgument("ise", "suspected-te-input-file", "(optional) suspected transposable elements pfam domains input file, if missing internal list will be used");
-	public static final CliOption<Path> REFERENCE_PROTEINS_LENGTH_INPUT_FILE = CliOption.optionalPathWithArgument("ilr", "reference-protein-lengths-input-file", "(optional) reference protein length distribution file, if missing internal reference will be used");
-	public static final CliOption<Double> NO_DOMAINS_CDS_MASKED_CUTOFF = CliOption.optionalDoubleWithArgument("ndc", "no-domain-masked-cutoff", "(optional) masked CDS cutoff for TE detection with no Pfam domains, NaN mean not used, default="+DEFAULT_NO_DOMAINS_CDS_MASKED_CUTOFF,DEFAULT_NO_DOMAINS_CDS_MASKED_CUTOFF);
-	public static final CliOption<Double> SUSPECTED_DOMAINS_CDS_MASKED_CUTOFF = CliOption.optionalDoubleWithArgument("sdc", "suspected-domain-masked-cutoff", "(optional) masked CDS cutoff for TE detection with suspected TE Pfam domains, NaN mean always TE, default="+DEFAULT_SUSPECTED_DOMAINS_CDS_MASKED_CUTOFF,DEFAULT_SUSPECTED_DOMAINS_CDS_MASKED_CUTOFF);
-	public static final CliOption<Integer> PROTEIN_LENGTCH_BINNING = CliOption.optionalIntegerWithArgument("plb", "protein-length-binning", "(optional) protein length distribution binning, default="+DEFAULT_PROTEIN_LENGTCH_BINNING,DEFAULT_PROTEIN_LENGTCH_BINNING);
-	public static final CliOption<Path> GENE_CODE_FILE = CliOption.optionalPathWithArgument("igc", "gene-code-input-file", "(optional) gene code input file (gc.prt), if missing internal copy will be used, see --gene-code");
 
 	private final Logger logger;
 
@@ -139,9 +169,8 @@ public class ABAQS implements BatchRunnableCli {
 
 	@Override
 	public Options buildOptions() {
-		return CliOption.buildCliOptions(VERBOSE, VERBOSE_OUTPUT_FOLDER, INPUT_GFF3,INPUT_SCAFFOLFS_FASTA,INPUT_PROTEINS_FASTA,INPUT_DOMAINS,OUTPUT_RESULTS,OUTPUT_GFF3,FASTA_WIDTH,GFF3_PROTEIN_ID_MAPPER,PROTEIN_FASTA_PROTEIN_ID_MAPPER,DOMAINS_MAPPER,
-				ISOFORMS_MIN_OVERLAP,BUSCO_DATA,BUSCO_DATA_FILE,MASKER_FUNCTION,TE_INPUT_FILE,SUSPECTED_TE_INPUT_FILE,REFERENCE_PROTEINS_LENGTH_INPUT_FILE,
-				NO_DOMAINS_CDS_MASKED_CUTOFF,SUSPECTED_DOMAINS_CDS_MASKED_CUTOFF,PROTEIN_LENGTCH_BINNING,GENE_CODE_FILE);
+		return CliOption.buildCliOptions(INPUT_GFF3,INPUT_SCAFFOLFS_FASTA,BUSCO_DATA_FILE,BUSCO_DATA,DOMAINS_MAPPER,INPUT_DOMAINS,GFF3_PROTEIN_ID_MAPPER,PROTEIN_FASTA_PROTEIN_ID_MAPPER,INPUT_PROTEINS_FASTA,GENE_CODE,GENE_CODE_FILE,
+				REFERENCE_PROTEINS_LENGTH_INPUT_FILE,ISOFORMS_MIN_OVERLAP,SUSPECTED_TE_INPUT_FILE,TE_INPUT_FILE,MASKER_FUNCTION,NO_DOMAINS_CDS_MASKED_CUTOFF,OUTPUT_RESULTS,FASTA_WIDTH,OUTPUT_GFF3,PROTEIN_LENGTCH_BINNING,SUSPECTED_DOMAINS_CDS_MASKED_CUTOFF,VERBOSE,VERBOSE_OUTPUT_FOLDER);
 	}
 
 	@Override
@@ -441,16 +470,25 @@ public class ABAQS implements BatchRunnableCli {
 			) throws IOException {
 
 		Map<GeneRecord, Set<GeneRecord>> isoforms = detectIsoforms(logger, gffData, geneRecords, isoformsMinimumOverlap, verbose); 
+		if (verbose) {
+			isoforms.entrySet().stream().sorted((e1,e2)->StandardComparatorsHelper.stringAndNumbersCompareIgnoreCase(e1.getKey().mRNA.id, e2.getKey().mRNA.id).toComparatorResult()).forEach(entry->{
+				GeneRecord id = entry.getKey();
+				Set<GeneRecord> recs = entry.getValue();
+				recs.stream().sorted(GeneRecord::sortByProteinLengthDesc).forEach(rec->{
+					LoggerHelper.log(logger, Level.INFO, "Isoform: [%s] <-> [%s] %s: %d-%d <-> %d-%d (%s)",id.mRNA.id,rec.mRNA.id,id.mRNA.seqid,id.mRNA.start,id.mRNA.end, rec.mRNA.start, rec.mRNA.end, rec.mRNA.strand);
+				});
+			});
+		}
 		MutableInt totalGenesInIsoforms = new MutableInt();
 		isoforms.forEach((id,recs)->totalGenesInIsoforms.add(recs.size()));
-		LoggerHelper.log(logger, Level.INFO, "Found total %,d isoforms having total %,d genes",isoforms.size(),totalGenesInIsoforms.intValue());
-
+		LoggerHelper.log(logger, Level.INFO, "Found total %,d isoform groups having total %,d genes",isoforms.size(),totalGenesInIsoforms.intValue());
+		
 		double isoformsFactor = (double) isoforms.size() / (double)geneRecords.size();
 		double buscoCompleteFactor = Double.NaN;
 		double buscoDuplicatedFactor = Double.NaN;
 		if (buscoData!=null) {
 			buscoCompleteFactor = buscoData.complete;
-			buscoDuplicatedFactor = buscoData.duplicated;
+			buscoDuplicatedFactor = buscoData.duplicated/(1.0+buscoData.duplicated);
 		} else {
 			buscoCompleteFactor = 1.0;
 			buscoDuplicatedFactor = 0.0;
