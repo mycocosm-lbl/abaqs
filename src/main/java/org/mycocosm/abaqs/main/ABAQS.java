@@ -474,9 +474,9 @@ usage options:
 			isoforms.entrySet().stream().sorted((e1,e2)->StandardComparatorsHelper.stringAndNumbersCompareIgnoreCase(e1.getKey().mRNA.id, e2.getKey().mRNA.id).toComparatorResult()).forEach(entry->{
 				GeneRecord id = entry.getKey();
 				Set<GeneRecord> recs = entry.getValue();
-				recs.stream().sorted(GeneRecord::sortByProteinLengthDesc).forEach(rec->{
-					LoggerHelper.log(logger, Level.INFO, "Isoform: [%s] <-> [%s] %s: %d-%d <-> %d-%d (%s)",id.mRNA.id,rec.mRNA.id,id.mRNA.seqid,id.mRNA.start,id.mRNA.end, rec.mRNA.start, rec.mRNA.end, rec.mRNA.strand);
-				});
+				String tailIds = recs.stream().sorted(GeneRecord::sortByProteinLengthDesc).map(r->String.format("[%s]",r.mRNA.id)).collect(Collectors.joining(":"));
+				String tailDetails = recs.stream().sorted(GeneRecord::sortByProteinLengthDesc).map(r->String.format("(%d-%d/%d aa)",r.mRNA.start,r.mRNA.end, r.protein.sequence.length())).collect(Collectors.joining(":"));
+				LoggerHelper.log(logger, Level.INFO, "Isoform: [%s]:%s %s/(%d-%d/%d aa):%s (%s)",id.mRNA.id,tailIds,id.mRNA.seqid,id.mRNA.start,id.mRNA.end, id.protein.sequence.length(), tailDetails, id.mRNA.strand);
 			});
 		}
 		MutableInt totalGenesInIsoforms = new MutableInt();

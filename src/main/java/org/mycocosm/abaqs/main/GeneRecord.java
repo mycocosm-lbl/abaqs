@@ -28,4 +28,30 @@ public class GeneRecord {
 	public static final int sortByProteinLengthDesc(GeneRecord r1, GeneRecord r2) {
 		return Integer.compare(r2.protein.sequence.length(), r1.protein.sequence.length());
 	}
+
+	@Override
+	public int hashCode() {
+		final int prime = 31;
+		int result = 1;
+		result = prime * result + ((mRNA == null) ? 0 : mRNA.hashCode());
+		return result;
+	}
+
+	@Override
+	public boolean equals(Object obj) {
+		if (this == obj)
+			return true;
+		if (obj == null)
+			return false;
+		if (getClass() != obj.getClass())
+			return false;
+		GeneRecord other = (GeneRecord) obj;
+		if (mRNA == null) {
+			if (other.mRNA != null)
+				return false;
+		} else if (!mRNA.equals(other.mRNA))
+			return false;
+		return true;
+	}
+	
 }
