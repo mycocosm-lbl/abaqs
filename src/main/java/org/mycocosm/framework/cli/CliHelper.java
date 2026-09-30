@@ -1,11 +1,13 @@
 package org.mycocosm.framework.cli;
 
+import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 
 import org.apache.commons.cli.CommandLine;
 import org.apache.commons.cli.DefaultParser;
-import org.apache.commons.cli.HelpFormatter;
+import org.apache.commons.cli.help.HelpFormatter;
 import org.apache.commons.cli.Option;
 import org.apache.commons.cli.Options;
 import org.apache.commons.cli.ParseException;
@@ -18,6 +20,12 @@ public class CliHelper {
 	public static final int UNLIMITED_NUMBER_OF_ARGUMENTS = Option.UNLIMITED_VALUES;
 	public static Option createOption(String shortName, String fullName, boolean hasArgument, String description, boolean required) {
 		Option ret = new Option(shortName, fullName, hasArgument, description);
+		ret.setRequired(required);
+		return ret;
+	}
+
+	public static OptionWithKey<Integer> createOptionWithKey(String shortName, String fullName, boolean hasArgument, String description, boolean required, Integer key) {
+		OptionWithKey<Integer> ret = new OptionWithKey<>(shortName, fullName, hasArgument, description, key);
 		ret.setRequired(required);
 		return ret;
 	}
@@ -35,14 +43,15 @@ public class CliHelper {
 
 	public static final Options buildCliOptions(CliOption<?>[] base, CliOption<?>... options) {
 		Options ret = new Options();
+		int index=0;
 		if (!ArraysHelper.isNullOrEmpty(base)) {
 			for (CliOption<?> o:base) {
-				ret.addOption(createOption(o.name, o.longName, o.hasArgument, o.description, o.required));
+				ret.addOption(createOptionWithKey(o.name, o.longName, o.hasArgument, o.description, o.required, index++));
 			}
 		}
 		if (options!=null) {
 			for (CliOption<?> o:options) {
-				ret.addOption(createOption(o.name, o.longName, o.hasArgument, o.description, o.required));
+				ret.addOption(createOptionWithKey(o.name, o.longName, o.hasArgument, o.description, o.required, index++));
 			}
 		}
 		return ret;
@@ -126,11 +135,28 @@ public class CliHelper {
 		}
 	}
 
-	private static final int HELP_WIDTH = Integer.MAX_VALUE;
-	@SuppressWarnings("deprecation")
 	public static final void printHelp(RunnableCli process, Options options) {
-		HelpFormatter formatter = new HelpFormatter();
-		String command = String.format("%n%s [options]%n", process.getClass().getCanonicalName());
-		formatter.printHelp(HELP_WIDTH,command,process.getHelpHeader(),options,process.getHelpFooter(), process.autoUsage());
+		try {
+			HelpFormatter formatter = HelpFormatter.builder()
+					.setComparator(new Comparator<Option>() {
+
+						@SuppressWarnings("unchecked")
+						@Override
+						public int compare(Option o1, Option o2) {
+							if (o1 instanceof OptionWithKey<?> && o2 instanceof OptionWithKey<?>) {
+								Comparable<Object> key1 = ((OptionWithKey<? extends Comparable<Object>>)o1).getComparableKey();
+								Comparable<Object> key2 = ((OptionWithKey<? extends Comparable<Object>>)o2).getComparableKey();
+								return key1.compareTo(key2);
+							} else {
+								return o1.getKey().compareToIgnoreCase(o2.getKey());
+							}
+						}})
+					.setShowSince(false)
+					.get();
+			String command = String.format("%n%s [options]%n", process.getClass().getCanonicalName());
+			formatter.printHelp(command,process.getHelpHeader(),options,process.getHelpFooter(), process.autoUsage());
+		} catch (IOException e) {
+			throw new RuntimeException(e);
+		}
 	}
 }
