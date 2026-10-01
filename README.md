@@ -125,7 +125,7 @@ Error parsing command line: Missing required option: ig
   -v   --verbose                                    (optional) produce verbose output                                                                                                                                                                     
   -vo  --verbose-output-folder <arg>                (optional) output folder for verbose output, will save supplemental data during computation  in that folder
 ```
-##Basic calculation of ABAQS requires four pieces of data.
+## Basic calculation of ABAQS requires four pieces of data.
 
 1. \-is: The assembly fasta file. This should be softmasked using a repeatmasking program. Ideally, low-complexity repeats are ignored such as by running RepeatMasker with the \-nolow option.
 1. \-ig: Protein models in gff3 or gtf format. Each gene feature / protein must have a unique name and it is expected that the name is specified in the attributes field as proteinId (shown in red below). If some other field is used to name the protein, you can use the \-mg option to specify it. Here are a few lines from an example file.
