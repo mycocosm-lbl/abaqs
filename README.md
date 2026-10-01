@@ -125,6 +125,11 @@ Error parsing command line: Missing required option: ig
   -v   --verbose                                    (optional) produce verbose output                                                                                                                                                                     
   -vo  --verbose-output-folder <arg>                (optional) output folder for verbose output, will save supplemental data during computation  in that folder
 ```
+##Basic calculation of ABAQS requires four pieces of data.
+
+1. \-is: The assembly fasta file. This should be softmasked using a repeatmasking program. Ideally, low-complexity repeats are ignored such as by running RepeatMasker with the \-nolow option.
+1. \-ig: Protein models in gff3 or gtf format. Each gene feature / protein must have a unique name and it is expected that the name is specified in the attributes field as proteinId (shown in red below). If some other field is used to name the protein, you can use the \-mg option to specify it. Here are a few lines from an example file.
+```
 ##gff-version 3
 ##sequence-region scaffold_1 1 1958655
 scaffold_1    fgenesh1_pg    gene    167    2008    0    +    .    ID=gene_2211;feature_name=fgenesh1_pg.1_#_1;Name=gene-jgi|Clapy1|1833732;portal_id=Clapy1;proteinId=1833732;transcriptId=1833838
@@ -132,27 +137,43 @@ scaffold_1    fgenesh1_pg    mRNA    167    2008    .    +    .    ID=mRNA_2211;
 scaffold_1    fgenesh1_pg    exon    167    169    .    +    .    ID=exon_12561;Parent=mRNA_2211
 scaffold_1    fgenesh1_pg    CDS    167    169    .    +    0    ID=CDS_12138;Parent=mRNA_2211
 ```
-3. -ibf: BUSCO data file. This is usually called “short_summary.txt” by default when BUSCO is run. Else, you can also provide the BUSCO summary using the `-ib` option.
-3. -id: Pfam data for all the proteins. This is a tab separated text file where the proteinId (or whatever other attribute was specified for the gff3 file using the -mg option) is in column 1 and a pfam domain associated with that protein is in one of the columns such that the immediately preceding column has the text ‘HMMPfam’. If any other format is used, it can be specified using the `-md` option. eg: if you use the default tsv output of Interproscan, then, it uses ‘Pfam’ instead of ‘HMMPfam’. Therefore, we can use `-md '(?<id>\w+)\t.*\tPfam\t(?<domain>\w+)\t.*'`
-If you use a two column file with the proteinId in column 1 and the pfam data in column 2, use `-md '(?<id>\w+)\t(?<domain>\w+)'`
+1. \-ibf: BUSCO data file. This is usually called “short\_summary.txt” by default when BUSCO is run. Else, you can also provide the BUSCO summary using the \-ib option.  
+   Generally, you can run BUSCO using a command like:  
+   `busco -i proteins.fasta --auto-lineage-euk -o busco_output -m prot`  
+1. \-id: Pfam data for all the proteins. This is a tab separated text file where the proteinId (or whatever other attribute was specified for the gff3 file using the \-mg option) is in column 1 and a pfam domain associated with that protein is in one of the columns such that the immediately preceding column has the text ‘Pfam’.   
+   eg: Using InterProScan-5.78-109.0, you can run the command  
+   `interproscan.sh -i inout.proteins.fasta -f TSV -appl Pfam`  
+   And it will produce an output like
+```
+402418	2b03b8b3595baefa2f3a895a67a8f2a9	89	Pfam	PF11034	Glucose-repressible protein Grg1	19	87	5.0E-21	T	18-09-2026	IPR020100	Glucose-repressible protein Grg1	-	-`  
+441626	d5e71191dbd9b5da093aa60e64e17393	717	Pfam	PF00083	Sugar (and other) transporter	174	613	7.5E-104	T	18-09-2026	IPR005828	Major facilitator, sugar transporter-like	-	-`  
+429463	47008df6a8758c4a622f27615b9ed5be	814	Pfam	PF13374	Tetratricopeptide repeat	525	552	27.0	T	18-09-2026	-	-	-	-`  
+429463	47008df6a8758c4a622f27615b9ed5be	814	Pfam	PF13374	Tetratricopeptide repeat	721	751	0.013	T	18-09-2026	-	-	-	-`  
+429463	47008df6a8758c4a622f27615b9ed5be	814	Pfam	PF13374	Tetratricopeptide repeat	754	791	0.91	T	18-09-2026	-	-	-	-`  
+429463	47008df6a8758c4a622f27615b9ed5be	814	Pfam	PF13424	Tetratricopeptide repeat	638	710	3.9E-14	T	18-09-2026	-	-	-	-`  
+429463	47008df6a8758c4a622f27615b9ed5be	814	Pfam	PF13424	Tetratricopeptide repeat	560	627	2.0E-10	T	18-09-2026	-	-	-	-`  
+466084	97cde85c0dd806bd6fb831f06d6e528e	133	Pfam	PF04828	Glutathione-dependent formaldehyde-activating enzyme	4	116	1.0E-19	T	18-09-2026	IPR006913	CENP-V/GFA domain	-	-`
+```
+   If any other format is used, it can be specified using the \-md option. Eg: If you use a two column file with the proteinId in column 1 and the pfam data in column 2, use \-md '(?\<id\>\\w+)\\t(?\<domain\>\\w+)'
 
-# Interpreting the results.
-
+**Interpreting the results.**  
 After successful completion of the calculation, the software will provide the following data.
 
-1. Total records:  This is the total number of features in the gff file.
-1. Total genes:  Count of protein coding genes in the gff file.
-1. Total scaffolds:  Number of records in the assembly fasta file.
-1. Total proteins: This is the number of proteins. Ideally, it should be the same as “Total genes” in 2 above. See 10 below for why.
-1. Total proteins with domains: This is the number of proteins with at least one pfam domain as provided in the pfam data file [-id parameter]. Generally, this number should be >30% of the total number of genes. Else, either the pfam prediction was incomplete, or the file provided is not in the correct format. Use the -md parameter to specify the input format of the pfam data file.
-1. Total unique domains:  The number of unique pfams in the pfam data file provided.
-1. Protein lengths distribution factor:  This is the PLD score where 1 is ideal and >0.9 is very good. See the manuscript for how this is calculated. A low number here will significantly reduce the final ABAQS score.
-1. Incomplete genes factor: The proportion of genes that have both a start and stop codon. A low number here will significantly reduce the final ABAQS.
-1. Transposable elements factor: Proportion of TE genes retained in the predicted proteome. See the manuscript for how this is calculated. In short, these are identified using a curated list of known TE PFAM domains. 
-1. Isoforms factor:  The percentage of isoforms in the input data (gff file). This should ideally be zero [See the underlying manuscript for why this is preferred]. Coding sequences (CDSs) that overlap another CDS by more than 25% are classified as isoforms.
-1. BUSCO duplicated factor: Estimation of genome duplication produced by BUSCO.
-1. BUSCO complete factor:  Estimation of genome completeness estimated by BUSCO.
+1. Total records:  This is the total number of features in the gff file.  
+1. Total genes:  Count of protein coding genes in the gff file.  
+1. Total scaffolds:  Number of records in the assembly fasta file.  
+1. Total proteins: This is the number of proteins. Ideally, it should be the same as “Total genes” in 2 above. See 10 below for why.  
+1. Total proteins with domains: This is the number of proteins with at least one pfam domain as provided in the pfam data file \[-id parameter\]. Generally, this number should be \>30% of the total number of genes. Else, either the pfam prediction was incomplete, or the file provided is not in the correct format. Use the \-md parameter to specify the input format of the pfam data file.  
+1. Total unique domains:  The number of unique pfams in the pfam data file provided.  
+1. Protein lengths distribution factor:  This is the PLD score where 1 is ideal and \>0.9 is very good. See the manuscript for how this is calculated. A low number here will significantly reduce the final ABAQS score.  
+1. Incomplete genes factor: The proportion of genes that have both a start and stop codon. A low number here will significantly reduce the final ABAQS.  
+1. Transposable elements factor: Proportion of TE genes retained in the predicted proteome. See the manuscript for how this is calculated. In short, these are identified using a curated list of known TE PFAM domains.   
+1. Isoforms factor:  The percentage of isoforms in the input data (gff file). This should ideally be zero \[See the underlying manuscript for why this is preferred\]. Coding sequences (CDSs) that overlap another CDS by more than 25% are classified as isoforms.  
+1. BUSCO duplicated factor: Estimation of genome duplication produced by BUSCO \[D/(1+D)\].  
+1. BUSCO complete factor:  Estimation of genome completeness estimated by BUSCO.  
 1. ABAQS score: Final ABAQS on a 0-1 scale.
+
+
 
 # Copyright Notice
 
