@@ -128,7 +128,7 @@ Error parsing command line: Missing required option: ig
 ## Basic calculation of ABAQS requires four pieces of data.
 
 1. \-is: The assembly fasta file. This should be softmasked using a repeatmasking program. Ideally, low-complexity repeats are ignored such as by running RepeatMasker with the \-nolow option.
-1. \-ig: Protein models in gff3 or gtf format. Each gene feature / protein must have a unique name and it is expected that the name is specified in the attributes field as proteinId (shown in red below). If some other field is used to name the protein, you can use the \-mg option to specify it. Here are a few lines from an example file.
+1. \-ig: Protein models in gff3 or gtf format. Each gene feature / protein must have a unique name and it is expected that the name is specified in the attributes field as proteinId. If some other field is used to name the protein, you can use the \-mg option to specify it. Here are a few lines from an example file.
 ```
 ##gff-version 3
 ##sequence-region scaffold_1 1 1958655
