@@ -144,3 +144,6 @@
     "PF14227" => "UBN2_2 gag-polypeptide of LTR copia-type",
     "PF14244" => "UBN2_3 gag-polypeptide of LTR copia-type",
     "PF14372" => "Domain of unknown function (DUF4413) found in putative Tam3 transposases"
+    
+    "PF13391" => "HNH endonuclease"
+    

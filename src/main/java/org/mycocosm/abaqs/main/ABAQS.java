@@ -98,7 +98,7 @@ public class ABAQS implements BatchRunnableCli {
 	public static final double DEFAULT_ISOFORMS_MIN_OVERLAP = 0.25;
 	public static final MaskerFunction DEFAULT_MASKER_FUNCTION = MaskerFunction.TO_LOWER_CASE;
 	public static final double DEFAULT_NO_DOMAINS_CDS_MASKED_CUTOFF = 0.20;
-	public static final double DEFAULT_SUSPECTED_DOMAINS_CDS_MASKED_CUTOFF = Double.NaN;
+	public static final double DEFAULT_SUSPECTED_DOMAINS_CDS_MASKED_CUTOFF = 0.90;
 	public static final int DEFAULT_PROTEIN_LENGTCH_BINNING = 5;
 
 	public static final CliOption<Path> INPUT_GFF3 = CliOption.requiredPathWithArgument("ig", "input-gff", "(required) path to the input gff3 or gtf file, type is detected by the file name extention");
@@ -277,7 +277,7 @@ public class ABAQS implements BatchRunnableCli {
 		BuscoData buscoData = loadBuscoData(logger, buscoDataString, buscoDataFile);
 		Map<Integer,Double> referenceProteinLengthDitribution = loadReferenceProteinLengthDistribution(logger,referenceProteinLengthDistributionFile);
 
-		final Map<String /* mRNA.id */,GeneRecord> geneRecords = createGeneRecords(logger, gffData, maskerFunction, proteins, domains, gff3ProteinIdMapper, transposableElements, suspectedTransposableElements, noDomainCDSMaskedCutoff, suspectedDomainCDSMaskedCutoff);
+		final Map<String /* mRNA.id */,GeneRecord> geneRecords = createGeneRecords(logger, gffData, maskerFunction, proteins, domains, gff3ProteinIdMapper, transposableElements, suspectedTransposableElements, noDomainCDSMaskedCutoff, suspectedDomainCDSMaskedCutoff, verbose);
 		if (verbose) {
 			LoggerHelper.log(logger, Level.INFO, "Total collected %,d mRNA records for analisys",geneRecords.size());
 		}
@@ -332,7 +332,7 @@ public class ABAQS implements BatchRunnableCli {
 			}
 		});
 
-		final Map<String /* mRNA.id */,GeneRecord> filteredGeneRecords = createGeneRecords(logger, filteredGff, maskerFunction, proteins, domains, gff3ProteinIdMapper, transposableElements, suspectedTransposableElements, noDomainCDSMaskedCutoff, suspectedDomainCDSMaskedCutoff);
+		final Map<String /* mRNA.id */,GeneRecord> filteredGeneRecords = createGeneRecords(logger, filteredGff, maskerFunction, proteins, domains, gff3ProteinIdMapper, transposableElements, suspectedTransposableElements, noDomainCDSMaskedCutoff, suspectedDomainCDSMaskedCutoff, verbose);
 		if (verbose) {
 			LoggerHelper.log(logger, Level.INFO, "Total collected %,d mRNA records for analisys after filtering",geneRecords.size());
 		}
@@ -608,7 +608,7 @@ public class ABAQS implements BatchRunnableCli {
 		geneRecords.forEach((id,record)->{
 			if (record.detectedTtransposableElement) {
 				teCount.increment();
-				if (verbose) LoggerHelper.log(logger, Level.INFO, "Found TE: [%s]:%s",record.mRNA.id, record.domains.stream().map(d->d.toString()).collect(Collectors.joining(",")));
+				if (verbose) LoggerHelper.log(logger, Level.INFO, "Found TE: [%s]:%s",record.mRNA.id, record.domains!=null?record.domains.stream().map(d->d.id).collect(Collectors.joining(",")):"no domains");
 			}
 		});
 		LoggerHelper.log(logger, Level.INFO, "Found %,d TE or suspected TE",teCount.intValue());
@@ -622,20 +622,32 @@ public class ABAQS implements BatchRunnableCli {
 	b. Any model without domains that has CDS masking > 20%. The location of masking is obtained from the softmasked assembly file.
 	c. If suspicious domain alone, consider as TE if CDS masking > 90%
 	 */
-	private boolean isTransposableElement(Set<PfamDomain> domains, double portionOfCDSMasked, Set<PfamDomain> transposableElements, Set<PfamDomain> suspectedTransposableElements, double noDomainCDSMaskedCutoff, double suspectedDomainCDSMaskedCutoff) {
+	private boolean isTransposableElement(Gff3Record mRNA, Set<PfamDomain> domains, double portionOfCDSMasked, Set<PfamDomain> transposableElements, Set<PfamDomain> suspectedTransposableElements, double noDomainCDSMaskedCutoff, double suspectedDomainCDSMaskedCutoff, boolean verbose) {
 		// a. Has any domain from the known TE list, regardless of other domain content.
-		if (domains!=null && domains.stream().filter(transposableElements::contains).count()>0) {
-			return true;
-		};
 		// b. Any model without domains that has CDS masking > 20%. The location of masking is obtained from the softmasked assembly file.
 		//		if (CollectionsHelper.isNullOrEmpty(domains) && (Double.isNaN(noDomainCDSMaskedCutoff) || portionOfCDSMasked>noDomainCDSMaskedCutoff)) {
 		//			return true;
 		//		};
 		// c. If suspicious domain alone, consider as TE if CDS masking > 90%
-		if (domains!=null && domains.stream().filter(suspectedTransposableElements::contains).count()>0 && (Double.isNaN(suspectedDomainCDSMaskedCutoff) || portionOfCDSMasked>suspectedDomainCDSMaskedCutoff)) {
-			return true;
-		};
-		return false;
+		MutableBoolean ret = new MutableBoolean(false);
+		if (CollectionsHelper.isNullOrEmpty(domains)) {
+			if (Double.isNaN(noDomainCDSMaskedCutoff) || portionOfCDSMasked>noDomainCDSMaskedCutoff) {
+				ret.setTrue();
+				if (verbose) LoggerHelper.log(logger, Level.INFO, "Detected no domains transposable element in record [%s], portion of CDS masked:%.3f%%", mRNA.id, portionOfCDSMasked*100.0);
+			}
+		} else {
+			domains.stream().forEach(dom->{
+				if (transposableElements.contains(dom)) {
+					ret.setTrue();
+					if (verbose) LoggerHelper.log(logger, Level.INFO, "Detected transposable element '%s' in record [%s]", dom.id, mRNA.id);
+				}
+				if (suspectedTransposableElements.contains(dom) && (Double.isNaN(suspectedDomainCDSMaskedCutoff) || portionOfCDSMasked>suspectedDomainCDSMaskedCutoff)) {
+					ret.setTrue();
+					if (verbose) LoggerHelper.log(logger, Level.INFO, "Detected suspected transposable element '%s' in record [%s], portion of CDS masked:%.3f%%", dom.id, mRNA.id, portionOfCDSMasked*100);
+				}
+			});
+		}
+		return ret.booleanValue();
 	}
 
 	private static final Pattern PFAM_PATTERN = Pattern.compile("pf\\d+", Pattern.CASE_INSENSITIVE|Pattern.MULTILINE);
@@ -646,7 +658,7 @@ public class ABAQS implements BatchRunnableCli {
 				if (!PatternHelper.COMMENT_LINE.matcher(line).matches()) {
 					Matcher matcher = PFAM_PATTERN.matcher(line);
 					while (matcher.find()) {
-						ret.add(PfamDomain.of(matcher.group(0)));
+						ret.add(PfamDomain.of(matcher.group(0).toLowerCase()));
 					}
 				}
 			});
@@ -814,7 +826,7 @@ public class ABAQS implements BatchRunnableCli {
 	}
 
 
-	private Map<String,GeneRecord> createGeneRecords(Logger logger, GFF3Data gffData, MaskerFunction maskerFunction,  Map<String, SimpleFastaSequenceWithIdAndExtra> effectiveProteins, Map<String, Set<PfamDomain>> domains, Gff3RecordIdMapper gff3ProteinIdMapper, Set<PfamDomain> transposableElements, Set<PfamDomain> suspectedTransposableElements, double noDomainCDSMaskedCutoff, double suspectedDomainCDSMaskedCutoff) {
+	private Map<String,GeneRecord> createGeneRecords(Logger logger, GFF3Data gffData, MaskerFunction maskerFunction,  Map<String, SimpleFastaSequenceWithIdAndExtra> effectiveProteins, Map<String, Set<PfamDomain>> domains, Gff3RecordIdMapper gff3ProteinIdMapper, Set<PfamDomain> transposableElements, Set<PfamDomain> suspectedTransposableElements, double noDomainCDSMaskedCutoff, double suspectedDomainCDSMaskedCutoff, boolean verbose) {
 		Map<String,GeneRecord> ret = new HashMap<>();
 
 		gffData.records.forEach(geneRecord->{
@@ -832,7 +844,7 @@ public class ABAQS implements BatchRunnableCli {
 				});
 				String proteinId = gff3ProteinIdMapper.apply(mRNA);
 				double scaffoldCDSMasked = computeScaffoldMaskedFactor(gffData.scaffolds.get(mRNA.seqid),mRNA, maskerFunction);
-				boolean detectedTtransposableElement = isTransposableElement(domains.get(proteinId), scaffoldCDSMasked, transposableElements, suspectedTransposableElements, noDomainCDSMaskedCutoff, suspectedDomainCDSMaskedCutoff);
+				boolean detectedTtransposableElement = isTransposableElement(mRNA, domains.get(proteinId), scaffoldCDSMasked, transposableElements, suspectedTransposableElements, noDomainCDSMaskedCutoff, suspectedDomainCDSMaskedCutoff, verbose);
 				GeneRecord record = new GeneRecord(mRNA, mRNAs.size(), cdsStart.intValue(), cdsEnd.intValue(), effectiveProteins.get(proteinId), domains.get(proteinId), scaffoldCDSMasked, detectedTtransposableElement);
 				ret.put(mRNA.id,record);
 			});
@@ -905,7 +917,7 @@ public class ABAQS implements BatchRunnableCli {
 					Matcher m = domainsProteinMapper.matcher(line);
 					if (m.matches()) {
 						String proteinId = m.group("id");
-						String pfam = m.group("domain");
+						String pfam = m.group("domain").toLowerCase();
 						ret.computeIfAbsent(proteinId, id->new HashSet<>()).add(PfamDomain.of(pfam));
 						totalAddedDomains.increment();
 						if (verbose) {
