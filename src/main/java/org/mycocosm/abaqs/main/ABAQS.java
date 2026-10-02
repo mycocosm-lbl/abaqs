@@ -629,25 +629,32 @@ public class ABAQS implements BatchRunnableCli {
 		//			return true;
 		//		};
 		// c. If suspicious domain alone, consider as TE if CDS masking > 90%
-		MutableBoolean ret = new MutableBoolean(false);
+		MutableBoolean hasTe = new MutableBoolean(false);
+		MutableBoolean hasNoDomainTe = new MutableBoolean(false);
+		MutableBoolean hasSuspectedTe = new MutableBoolean(false);
+		MutableBoolean hasOtherDomains = new MutableBoolean(false);
+		
 		if (CollectionsHelper.isNullOrEmpty(domains)) {
 			if (Double.isNaN(noDomainCDSMaskedCutoff) || portionOfCDSMasked>noDomainCDSMaskedCutoff) {
-				ret.setTrue();
+				hasNoDomainTe.setTrue();
 				if (verbose) LoggerHelper.log(logger, Level.INFO, "Detected no domains transposable element in record [%s], portion of CDS masked:%.3f%%", mRNA.id, portionOfCDSMasked*100.0);
 			}
 		} else {
 			domains.stream().forEach(dom->{
 				if (transposableElements.contains(dom)) {
-					ret.setTrue();
+					hasTe.setTrue();
 					if (verbose) LoggerHelper.log(logger, Level.INFO, "Detected transposable element '%s' in record [%s]", dom.id, mRNA.id);
 				}
 				if (suspectedTransposableElements.contains(dom) && (Double.isNaN(suspectedDomainCDSMaskedCutoff) || portionOfCDSMasked>suspectedDomainCDSMaskedCutoff)) {
-					ret.setTrue();
+					hasSuspectedTe.setTrue();
 					if (verbose) LoggerHelper.log(logger, Level.INFO, "Detected suspected transposable element '%s' in record [%s], portion of CDS masked:%.3f%%", dom.id, mRNA.id, portionOfCDSMasked*100);
+				}
+				if (!suspectedTransposableElements.contains(dom)) {
+					hasOtherDomains.setTrue();
 				}
 			});
 		}
-		return ret.booleanValue();
+		return hasTe.booleanValue() || hasNoDomainTe.booleanValue() || (!hasOtherDomains.booleanValue() && hasSuspectedTe.booleanValue());
 	}
 
 	private static final Pattern PFAM_PATTERN = Pattern.compile("pf\\d+", Pattern.CASE_INSENSITIVE|Pattern.MULTILINE);
