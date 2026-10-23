@@ -58,16 +58,17 @@ public class SequenceHelper {
 	public static final String formatAsFastaWithId(String id, int maxWidth, String sequence, boolean commentOut) {
 		return formatAsFastaWithId(id, null, maxWidth, sequence, commentOut, StopCodonsRemove.none);
 	}
-
+	public static final String processStopCodons(String sequence, StopCodonsRemove removeStopCodons) {
+		switch (removeStopCodons) {
+		case ending: return ENDING_STOP_CODON.matcher(sequence).replaceAll("");
+		case all: return ALL_STOP_CODON.matcher(sequence).replaceAll("");
+		default: return sequence;
+		}
+	}
 	private static final List<String> splitSequence(int maxWidth, String sequence, StopCodonsRemove removeStopCodons) {
 		List<String> ret = new ArrayList<>(); 
 		int start=0;
-		String seq;
-		switch (removeStopCodons) {
-		case ending: seq=ENDING_STOP_CODON.matcher(sequence).replaceAll(""); break;
-		case all: seq=ALL_STOP_CODON.matcher(sequence).replaceAll(""); break;
-		default: seq=sequence; break;
-		}
+		String seq = processStopCodons(sequence, removeStopCodons);
 		while (start<seq.length()) {
 			ret.add(TextHelper.safeSubstring(seq,start,start+maxWidth));
 			start+=maxWidth;

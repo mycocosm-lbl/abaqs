@@ -10,6 +10,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.function.Predicate;
+import java.util.logging.Level;
 import java.util.logging.Logger;
 
 import org.mycocosm.framework.collections.CollectionsHelper;
@@ -17,6 +18,7 @@ import org.mycocosm.framework.fasta.FastaFile;
 import org.mycocosm.framework.fasta.Scaffold;
 import org.mycocosm.framework.fasta.SequenceType;
 import org.mycocosm.framework.fasta.SimpleFastaSequenceWithId;
+import org.mycocosm.framework.logger.LoggerHelper;
 
 public class GFF3Data {
 	public final List<Gff3Record> records;
@@ -42,7 +44,7 @@ public class GFF3Data {
 		// Parsing the input file
 		String line = reader.readLine();
 		while (line!=null) {
-			Gff3Record record = Gff3Record.fromLine(line,acceptMissingId, gffParserSupport);
+			Gff3Record record = Gff3Record.fromLine(logger, line,acceptMissingId, gffParserSupport);
 			if (record!=null) {
 				allRecords.add(record);
 				String key = gffParserSupport.toKey(record);
@@ -52,6 +54,8 @@ public class GFF3Data {
 				if (record.catergory.equals(Gff3RecordCategory.fasta)) {
 					scaffolds = loadFastaFromReader(reader);
 				}
+			} else {
+				LoggerHelper.log(logger, Level.WARNING, "Ignored unrecognized GFF/GTF record: '%s'", line);
 			}
 			line = reader.readLine();
 		}

@@ -6,6 +6,8 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.function.Predicate;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
@@ -15,6 +17,7 @@ import org.mycocosm.framework.biology.SequenceSegment;
 import org.mycocosm.framework.biology.Strand;
 import org.mycocosm.framework.collections.CollectionsHelper;
 import org.mycocosm.framework.comparators.ComparableHelper;
+import org.mycocosm.framework.logger.LoggerHelper;
 import org.mycocosm.framework.text.TextHelper;
 import org.mycocosm.framework.utils.ExceptionsHelper;
 import org.mycocosm.framework.utils.KeyValue;
@@ -120,6 +123,9 @@ public class Gff3Record {
 	static final Gff3Record fasta() {
 		return new Gff3Record(Gff3RecordCategory.fasta, null, null, null, null, null, 0, 0, Double.NaN, null, -1, null);
 	}
+	static final Gff3Record comment() {
+		return new Gff3Record(Gff3RecordCategory.comment, null, null, null, null, null, 0, 0, Double.NaN, null, -1, null);
+	}
 
 	protected Gff3Record setParent(Gff3Record parent) {
 		Gff3Record ret = new Gff3Record(this.catergory, parent, this.id, this.seqid, this.source, this.type, this.start, this.end, this.score, this.strand, this.phase, this.meta);
@@ -189,6 +195,9 @@ public class Gff3Record {
 			break;
 		case fasta:
 			writer.printf("##%s%n","FASTA");
+			break;
+		case comment:
+			writer.printf("#%n");
 			break;
 		}
 	}
@@ -268,8 +277,8 @@ public class Gff3Record {
 	}
 
 
-	private static final Pattern COMMENT = Pattern.compile("#[^#].*|#");
-	private static final Pattern META = Pattern.compile("##(\\S+)\\s*(.*)");
+	private static final Pattern COMMENT = Pattern.compile("#[^#!].*|#");
+	private static final Pattern META = Pattern.compile("#[#!](\\S+)\\s*(.*)");
 
 	//	static final boolean isComment(String line) {
 	//		return COMMENT.matcher(line).matches();
@@ -287,7 +296,7 @@ public class Gff3Record {
 	/*
 	 * Parse line and return record (
 	 */
-	static final Gff3Record fromLine(String line, boolean acceptMissingId, GffParserSupport parserSupport) {
+	static final Gff3Record fromLine(Logger logger, String line, boolean acceptMissingId, GffParserSupport parserSupport) {
 		try {
 			if (TextHelper.isNullOrEmpty(line) || COMMENT.matcher(line).matches()) { // simply ignore comments and empty lines
 				return null; 
@@ -305,6 +314,10 @@ public class Gff3Record {
 					String seqid = GffParserSupport.unEscape(split[0]);
 					String source = GffParserSupport.unEscape(split[1]);
 					Gff3Type type = parserSupport.toType (split[2]);
+					if (type==null) {
+						LoggerHelper.log(logger, Level.WARNING, "Unrecognized GFF record type:'%s'",split[2]);
+						return null;
+					}
 					int start = toIntegerRelaxed(split[3]);
 					int end = toIntegerRelaxed(split[4]);
 					double score = parseScore(split[5]);
