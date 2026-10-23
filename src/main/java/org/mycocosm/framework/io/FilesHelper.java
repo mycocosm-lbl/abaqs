@@ -321,9 +321,9 @@ public class FilesHelper {
 //		return loadDirectoryWithAttributes(dir, filter, EMPTY_FILE_VISIT_OPTIONS);
 //	}
 //	
-//	public static final List<Path> loadDirectory(Path dir, final PathFilter filter, FileVisitOption... options) throws IOException {
-//		return loadDirectory(dir,filter,toOptionsSet(options));
-//	}
+	public static final List<Path> loadDirectory(Path dir, final PathFilter filter, FileVisitOption... options) throws IOException {
+		return loadDirectory(dir,filter,toOptionsSet(options));
+	}
 //
 //	public static final List<Path> loadDirectoryAll(Path dir, FileVisitOption... options) throws IOException {
 //		return loadDirectory(dir, new AbstractPathFilterignoringErrors() {

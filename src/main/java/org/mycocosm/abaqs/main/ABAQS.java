@@ -6,7 +6,10 @@ import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.PrintWriter;
 import java.net.SocketException;
+import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.attribute.BasicFileAttributes;
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -50,6 +53,7 @@ import org.mycocosm.framework.fasta.SimpleFastaSequenceWithId;
 import org.mycocosm.framework.fasta.SimpleFastaSequenceWithIdAndExtra;
 import org.mycocosm.framework.io.FilesHelper;
 import org.mycocosm.framework.io.IoHelper;
+import org.mycocosm.framework.io.PathFilter;
 import org.mycocosm.framework.logger.LoggerFactory;
 import org.mycocosm.framework.logger.LoggerHelper;
 import org.mycocosm.framework.text.PatternHelper;
@@ -89,7 +93,8 @@ Use Neucr2 as test case
 public class ABAQS implements BatchRunnableCli {
 
 	// scaffold_1	Genemark4	gene	14	859	0	-	.	ID=gene_2980;feature_name=gm4.1_g;Name=gene-jgi|Nitpal1|1302658;portal_id=Nitpal1;product=hypothetical protein;proteinId=1302658;transcriptId=1303014
-	public static final String DEFAULT_GFF3_TO_PROTEIN_ID_MAPPER = "attributes:proteinId:.*->{0}"; 
+//	public static final String DEFAULT_GFF3_TO_PROTEIN_ID_MAPPER = "attributes:proteinId:.*->{0}"; 
+	public static final String DEFAULT_GFF3_TO_PROTEIN_ID_MAPPER = "id:"; 
 	// >jgi|Nitpal1|781|CE780_67 proteinId=781 transcriptId=781
 	public static final String DEFAULT_PROTEIN_FASTA_TO_PROTEIN_ID_MAPPER = ".+proteinId\\s*=\\s*(\\d+).*->{1}"; 
 	// P51587  14086411a2cdf1c4cba63020e1622579    3418    Pfam    PF09103 BRCA2, oligonucleotide/oligosaccharide-binding, domain 1    2670    2799    7.9E-43 T   15-03-2013
@@ -105,11 +110,14 @@ public class ABAQS implements BatchRunnableCli {
 	public static final CliOption<Path> INPUT_SCAFFOLFS_FASTA = CliOption.optionalPathWithArgument("is", "input-scaffolds-fasta", "(recomended/required) assembly fasta file path, may be ommitted if the gff3 input file has embedded scaffolds fasta");
 	public static final CliOption<Path> BUSCO_DATA_FILE = CliOption.optionalPathWithArgument("ibf", "busco-data-file", "(recomended) path to the busco data file, using native busco output format");
 	public static final CliOption<String> BUSCO_DATA = CliOption.optionalStringWithArgument("ib", "busco-data", "(recomended if -ibf is not provided) busco data, like 'C:99.3%[S:98.9%,D:0.4%],F:0.3%,M:0.4%,n:758', if ommitted \"ideal\" BUSCO is assumed");
+	public static final CliOption<String> BUSCO_COMMAND_LINE = CliOption.optionalStringWithArgument("bcl", "busco-command-line", "(optional) Command line to run BUSCO, if presented and no BUSCO data provided, will be used to run BUSCO analisys");
 	public static final CliOption<Pattern> DOMAINS_MAPPER = CliOption.optionalPatternWithArgument("md", "domains-protein-id-mapper", "(recomended) mapper for protein id and domains in domains records, default='"+DEFAULT_DOMAINS_MAPPER+"'. See --input-domains and --input-proteins-fasta",DEFAULT_DOMAINS_MAPPER);
 	public static final CliOption<Path> INPUT_DOMAINS = CliOption.optionalPathWithArgument("id", "input-domains", "(recomended if -md is not used) input domains data file path, important note: used together with --domains-protein-id-mapper option to parse the input domains file");
+	public static final CliOption<String> INTERPRO_COMMAND_LINE = CliOption.optionalStringWithArgument("icl", "interpro-command-line", "(optional) Command line to run Interpro, if presented and no interpro data provided, will be used to run Interpro analisys");
 	public static final CliOption<String> GFF3_PROTEIN_ID_MAPPER = CliOption.optionalStringWithArgument("mg", "gff3-protein-id-mapper", "(optional) mapper for protein id in gff3 records, default='"+DEFAULT_GFF3_TO_PROTEIN_ID_MAPPER+"' , meaning use proteinId attribute for gene record. Used in connection to --input-proteins-fasta",DEFAULT_GFF3_TO_PROTEIN_ID_MAPPER);
 	public static final CliOption<String> PROTEIN_FASTA_PROTEIN_ID_MAPPER = CliOption.optionalStringWithArgument("mp", "protein-fasta-protein-id-mapper", "(optional) mapper for protein id in protein fasta records, default='"+DEFAULT_PROTEIN_FASTA_TO_PROTEIN_ID_MAPPER+"'",DEFAULT_PROTEIN_FASTA_TO_PROTEIN_ID_MAPPER);
 	public static final CliOption<Path> INPUT_PROTEINS_FASTA = CliOption.optionalPathWithArgument("ip", "input-proteins-fasta", "(optional) input proteins fasta file path, if ommitted then ABAQS will translate genes data into aminoacids using provided gene translation table id (--gene-code)");
+	public static final CliOption<Path> OUTPUT_PROTEINS_FASTA = CliOption.optionalPathWithArgument("op", "output-proteins-fasta", "(optional) output proteins fasta file path, if provided protein fasta file will be saved with ether provided protein sequences and id mapper, or with internally translated protein sequences");
 	public static final CliOption<Integer> GENE_CODE = CliOption.optionalIntegerWithArgument("g", "gene-code", "(optional), NCBI gene code id to be used for translation, if needed, default="+DEFAULT_GENE_CODE,DEFAULT_GENE_CODE);
 	public static final CliOption<Path> GENE_CODE_FILE = CliOption.optionalPathWithArgument("igc", "gene-code-input-file", "(optional) gene code input file (gc.prt), if missing internal copy will be used, see --gene-code");
 	public static final CliOption<Path> REFERENCE_PROTEINS_LENGTH_INPUT_FILE = CliOption.optionalPathWithArgument("ilr", "reference-protein-lengths-input-file", "(optional) reference protein length distribution file, if missing internal reference will be used");
@@ -125,6 +133,7 @@ public class ABAQS implements BatchRunnableCli {
 	public static final CliOption<Double> SUSPECTED_DOMAINS_CDS_MASKED_CUTOFF = CliOption.optionalDoubleWithArgument("sdc", "suspected-domain-masked-cutoff", "(optional) masked CDS cutoff for TE detection with suspected TE Pfam domains, NaN mean always TE, default="+DEFAULT_SUSPECTED_DOMAINS_CDS_MASKED_CUTOFF,DEFAULT_SUSPECTED_DOMAINS_CDS_MASKED_CUTOFF);
 	public static final CliOption<Boolean> VERBOSE = CliOption.optionalBooleanNoArgument("v", "verbose", "(optional) produce verbose output");
 	public static final CliOption<Path> VERBOSE_OUTPUT_FOLDER = CliOption.optionalPathWithArgument("vo", "verbose-output-folder", "(optional) output folder for verbose output, will save supplemental data during computation  in that folder");
+	public static final CliOption<Path> WORKING_DIR = CliOption.optionalPathWithArgument("wd", "working-dir", "(optional) working directory for use in process of computations, default to current", Path.of("."));
 
 	private final Logger logger;
 
@@ -141,8 +150,9 @@ public class ABAQS implements BatchRunnableCli {
 
 	@Override
 	public Options buildOptions() {
-		return CliOption.buildCliOptions(INPUT_GFF3,INPUT_SCAFFOLFS_FASTA,BUSCO_DATA_FILE,BUSCO_DATA,DOMAINS_MAPPER,INPUT_DOMAINS,GFF3_PROTEIN_ID_MAPPER,PROTEIN_FASTA_PROTEIN_ID_MAPPER,INPUT_PROTEINS_FASTA,GENE_CODE,GENE_CODE_FILE,
-				REFERENCE_PROTEINS_LENGTH_INPUT_FILE,ISOFORMS_MIN_OVERLAP,SUSPECTED_TE_INPUT_FILE,TE_INPUT_FILE,MASKER_FUNCTION,NO_DOMAINS_CDS_MASKED_CUTOFF,OUTPUT_RESULTS,FASTA_WIDTH,OUTPUT_GFF3,PROTEIN_LENGTCH_BINNING,SUSPECTED_DOMAINS_CDS_MASKED_CUTOFF,VERBOSE,VERBOSE_OUTPUT_FOLDER);
+		return CliOption.buildCliOptions(INPUT_GFF3,INPUT_SCAFFOLFS_FASTA,BUSCO_DATA_FILE,BUSCO_DATA,DOMAINS_MAPPER,INPUT_DOMAINS,GFF3_PROTEIN_ID_MAPPER,PROTEIN_FASTA_PROTEIN_ID_MAPPER,INPUT_PROTEINS_FASTA,OUTPUT_PROTEINS_FASTA,GENE_CODE,GENE_CODE_FILE,
+				REFERENCE_PROTEINS_LENGTH_INPUT_FILE,ISOFORMS_MIN_OVERLAP,SUSPECTED_TE_INPUT_FILE,TE_INPUT_FILE,MASKER_FUNCTION,NO_DOMAINS_CDS_MASKED_CUTOFF,OUTPUT_RESULTS,FASTA_WIDTH,OUTPUT_GFF3,PROTEIN_LENGTCH_BINNING,SUSPECTED_DOMAINS_CDS_MASKED_CUTOFF,
+				VERBOSE,VERBOSE_OUTPUT_FOLDER,WORKING_DIR,INTERPRO_COMMAND_LINE,BUSCO_COMMAND_LINE);
 	}
 
 	@Override
@@ -152,6 +162,7 @@ public class ABAQS implements BatchRunnableCli {
 		Path inputGff3 = INPUT_GFF3.getOptionValue(options);
 		Path inputScaffoldsFasta = INPUT_SCAFFOLFS_FASTA.getOptionValue(options);
 		Path inputProteinsFasta = INPUT_PROTEINS_FASTA.getOptionValue(options);
+		Path outputProteinsFasta = OUTPUT_PROTEINS_FASTA.getOptionValue(options);
 		Path inputDomains = INPUT_DOMAINS.getOptionValue(options);
 		Path outputResults = OUTPUT_RESULTS.getOptionValue(options);
 		Path outputGff3 = OUTPUT_GFF3.getOptionValue(options);
@@ -171,6 +182,9 @@ public class ABAQS implements BatchRunnableCli {
 		double noDomainCDSMaskedCutoff = NO_DOMAINS_CDS_MASKED_CUTOFF.getOptionValue(options);
 		double suspectedDomainCDSMaskedCutoff = SUSPECTED_DOMAINS_CDS_MASKED_CUTOFF.getOptionValue(options);
 		int proteinLengthBinning = PROTEIN_LENGTCH_BINNING.getOptionValue(options);
+		Path workingDir = WORKING_DIR.getOptionValue(options);
+		String interproCommand = INTERPRO_COMMAND_LINE.getOptionValue(options);
+		String buscoCommand = BUSCO_COMMAND_LINE.getOptionValue(options);
 
 		try {
 			processInput(
@@ -181,7 +195,8 @@ public class ABAQS implements BatchRunnableCli {
 					verbose,
 					verboseOutput,
 					inputScaffoldsFasta, 
-					inputProteinsFasta, 
+					inputProteinsFasta,
+					outputProteinsFasta,
 					inputDomains, 
 					gff3ProteinIdMapper, 
 					proteinFastaProteinIdMapper, 
@@ -198,7 +213,10 @@ public class ABAQS implements BatchRunnableCli {
 					referenceProteinLengthDistributionFile,
 					noDomainCDSMaskedCutoff,
 					suspectedDomainCDSMaskedCutoff,
-					proteinLengthBinning
+					proteinLengthBinning,
+					workingDir,
+					interproCommand,
+					buscoCommand
 					);
 		} catch (Exception e) {
 			throw new RuntimeException(e);
@@ -217,6 +235,7 @@ public class ABAQS implements BatchRunnableCli {
 			Path verboseOutputFolder,
 			Path inputScaffoldsFasta, 
 			Path inputProteinsFasta, 
+			Path outputProteinsFasta, 
 			Path inputDomains, 
 			Gff3RecordIdMapper 
 			gff3ProteinIdMapper, 
@@ -234,9 +253,11 @@ public class ABAQS implements BatchRunnableCli {
 			Path referenceProteinLengthDistributionFile, 
 			double noDomainCDSMaskedCutoff, 
 			double suspectedDomainCDSMaskedCutoff,
-			int proteinLengthBinningSize
-			) throws IOException {
-
+			int proteinLengthBinningSize,
+			Path workingDir,
+			String interproCommand,
+			String buscoCommand
+			) throws IOException, InterruptedException {
 		LoggerHelper.log(logger, Level.INFO, "Starting ABAQS version '%s'",VERSION);
 
 		if (verbose) {
@@ -271,10 +292,16 @@ public class ABAQS implements BatchRunnableCli {
 		} else { // will translate proteins
 			proteins = translateProteinsFastaWithIdMapper(logger, gffData, gff3ProteinIdMapper, ncbiGeneCode, verbose);
 		}
-		final Map<String, Set<PfamDomain>> domains = loadDomainsWithIdMapper(logger, inputDomains, domainsProteinMapper, verbose);
+		if (outputProteinsFasta!=null) {
+			LoggerHelper.log(logger, Level.INFO, "Writing proteins fasta to '%s'", outputProteinsFasta);
+			dumpFasta(proteins, outputProteinsFasta, fastaWidth, false);
+			LoggerHelper.log(logger, Level.INFO, "Wrote total %,d protein sequences", proteins.size());
+		}
+		final Map<String, Set<PfamDomain>> domains = loadOrComputePfamDomains(logger, inputDomains, domainsProteinMapper, verbose, proteins, workingDir, interproCommand, fastaWidth);
+		
 		final Set<PfamDomain> transposableElements = loadTEDomains(logger, "transposable elements", transposableElementsFile, TE_RESOURCE_LOCATION);
 		final Set<PfamDomain> suspectedTransposableElements = loadTEDomains(logger, "suspected transposable elements", suspectedTransposableElementsFile, SUSPECTED_TE_RESOURCE_LOCATION);
-		BuscoData buscoData = loadBuscoData(logger, buscoDataString, buscoDataFile);
+		BuscoData buscoData = computeOrLoadBuscoData(logger, buscoDataString, buscoDataFile, proteins, workingDir, buscoCommand, fastaWidth);
 		Map<Integer,Double> referenceProteinLengthDitribution = loadReferenceProteinLengthDistribution(logger,referenceProteinLengthDistributionFile);
 
 		final Map<String /* mRNA.id */,GeneRecord> geneRecords = createGeneRecords(logger, gffData, maskerFunction, proteins, domains, gff3ProteinIdMapper, transposableElements, suspectedTransposableElements, noDomainCDSMaskedCutoff, suspectedDomainCDSMaskedCutoff, verbose);
@@ -704,13 +731,52 @@ public class ABAQS implements BatchRunnableCli {
 		return 1.0 - incompleteGenesCount.doubleValue() / (double) geneRecords.size();
 	}
 
-	private BuscoData loadBuscoData(Logger logger, String buscoDataString, Path buscoDataFile) throws IOException {
+	//  short_summary.specific.hypocreaceae_odb12.busco_output_2.txt
+	private static final Pattern BUSCO_OUTPUT_FILTER = Pattern.compile("short_summary\\.specific\\..+\\.txt", Pattern.CASE_INSENSITIVE);
+	
+	private BuscoData computeOrLoadBuscoData(Logger logger, String buscoDataString, Path buscoDataFile, Map<String, SimpleFastaSequenceWithIdAndExtra> proteins, Path workingDir, String buscoCommand, int fastaWidth) throws IOException, InterruptedException {
 		if (!TextHelper.isNullOrEmpty(buscoDataString)) {
 			LoggerHelper.log(logger, Level.INFO, "Using provided BUSCO summary:'%s'",buscoDataString);
 			return BuscoData.of(buscoDataString);
 		} else if (buscoDataFile!=null) {
 			LoggerHelper.log(logger, Level.INFO, "Loading BUSCO from file:'%s'",buscoDataFile);
 			return BuscoData.ofFile(buscoDataFile);
+		} else if (!TextHelper.isNullOrEmpty(buscoCommand)) {
+			// docker run --rm --user $(id -u):$(id -g) --volume $(pwd):/busco_wd --workdir /busco_wd ezlabgva/busco:v6.1.0_cv3 busco --auto-lineage-euk --cpu 12 --mode prot --in Clamy1_translated-proteins.fasta --out busco_output --force
+			List<String> command = new ArrayList<>();
+			TextHelper.splitAndParceToCollection(command, buscoCommand, PatternHelper.SPACE_LINE, s->s);
+			Path buscoWorkingDir = workingDir.resolve("busco");
+			FilesHelper.createFolder(buscoWorkingDir);
+			Path buscoProteinFasta = buscoWorkingDir.resolve("busco-proteins.fasta");
+			dumpFasta(proteins, buscoProteinFasta, fastaWidth, false);
+			Path buscoOutput = buscoWorkingDir.resolve("busco-output");
+			CollectionsHelper.addAll(command, "--mode", "prot", "--in", buscoProteinFasta.getFileName().toString(), "--out", buscoOutput.getFileName().toString(), "--force");
+			LoggerHelper.log(logger, Level.INFO, "Computing BUSCO using command line '%s'", command.stream().collect(Collectors.joining(" ")));
+			ProcessBuilder builder = new ProcessBuilder(command);
+			Process run = builder
+			.directory(workingDir.toFile())
+			.start();
+			int output = run.waitFor();
+			if (output!=0) {
+				throw ErrorExitException.ofMessage("BUSCO analisys failed, rc=%d", output);
+			}
+			List<Path> accepted = FilesHelper.loadDirectory(buscoOutput, new PathFilter() {
+				
+				@Override
+				public boolean accept(Path path, BasicFileAttributes attrs) throws IOException {
+					return Files.isRegularFile(path) && BUSCO_OUTPUT_FILTER.matcher(path.getFileName().toString()).matches();
+				}
+			} );
+			LoggerHelper.log(logger, Level.INFO, "Computing BUSCO completed");
+			if (accepted.size()>0) {
+				Path buscoFile = accepted.get(0);
+				LoggerHelper.log(logger, Level.INFO, "Found BUSCO output file: '%s'",buscoFile);
+				return BuscoData.ofFile(buscoFile);
+				
+				
+			} else {
+				throw ErrorExitException.ofMessage("No BUSCO output file produced");
+			}
 		} else {
 			LoggerHelper.log(logger, Level.INFO, "No BUSCO data present");
 			return null;
@@ -913,33 +979,38 @@ public class ABAQS implements BatchRunnableCli {
 		}
 	}
 
-	private Map<String, Set<PfamDomain>> loadDomainsWithIdMapper(Logger logger, Path inputDomains, Pattern domainsProteinMapper, boolean verbose) throws IOException {
-		Map<String, Set<PfamDomain>> ret = new HashMap<>();
+	private Map<String, Set<PfamDomain>> loadOrComputePfamDomains(Logger logger, Path inputDomains, Pattern domainsProteinMapper, boolean verbose, Map<String, SimpleFastaSequenceWithIdAndExtra> proteins, Path workingDir, String interproCommand, int fastaWidth) throws IOException, InterruptedException {
+		Map<String, Set<PfamDomain>> ret=null;
 		final MutableInt totalSkippedLines = new MutableInt();
 		final MutableInt totalAddedDomains = new MutableInt();
 		if (inputDomains!=null) {
 			LoggerHelper.log(logger, Level.INFO, "Loading domains from input file:'%s'",inputDomains);
-			try (BufferedReader reader = FilesHelper.newBufferedReaderOptionallyGzipped(inputDomains)) {
-				reader.lines().forEach(line->{
-					Matcher m = domainsProteinMapper.matcher(line);
-					if (m.matches()) {
-						String proteinId = m.group("id");
-						String pfam = m.group("domain").toLowerCase();
-						ret.computeIfAbsent(proteinId, id->new HashSet<>()).add(PfamDomain.of(pfam));
-						totalAddedDomains.increment();
-						if (verbose) {
-							LoggerHelper.log(logger, Level.INFO, "Added domain '%s' to protein '%s'",pfam,proteinId);
-						}
-					} else {
-						totalSkippedLines.increment();
-						if (verbose) {
-							LoggerHelper.log(logger, Level.WARNING, "Skipped line in domains file:'%s'",line);
-						}
-					}
-				});
+			ret = loadDomains(logger, inputDomains, domainsProteinMapper, totalAddedDomains, totalSkippedLines, verbose);
+		} else if (!TextHelper.isNullOrEmpty(interproCommand)) {
+			
+			// ./interproscan-5.78-109.0/interproscan.sh --applications Pfam --input /scratch/abaqs/transposable-elements/Clamy1_translated-proteins.fasta --formats TSV --outfile Clamy1_pfam.tsv
+			List<String> command = new ArrayList<>();
+			TextHelper.splitAndParceToCollection(command, interproCommand, PatternHelper.SPACE_LINE, s->s);
+			CollectionsHelper.addAll(command, "--applications", "Pfam", "--formats", "TSV");
+			Path interproWorkingDir = workingDir.resolve("interpro");
+			FilesHelper.createFolder(interproWorkingDir);
+			Path interproProteinFasta = interproWorkingDir.resolve("interpro-proteins.fasta");
+			dumpFasta(proteins, interproProteinFasta, fastaWidth, true);
+			Path interproDomainsOutput = interproWorkingDir.resolve("interpro-domains.tsv");
+			CollectionsHelper.addAll(command, "--input", interproProteinFasta.toString(), "--outfile", interproDomainsOutput.toString());
+			LoggerHelper.log(logger, Level.INFO, "Computing Interpro using command line '%s'", command.stream().collect(Collectors.joining(" ")));
+			ProcessBuilder builder = new ProcessBuilder(command);
+			Process run = builder
+			.directory(workingDir.toFile())
+			.start();
+			int output = run.waitFor();
+			if (output!=0) {
+				throw ErrorExitException.ofMessage("Interpro analisys failed, rc=%d", output);
 			}
+			ret = loadDomains(logger, interproDomainsOutput, DEFAULT_DOMAINS_MAPPER, totalAddedDomains, totalSkippedLines, verbose);
+			LoggerHelper.log(logger, Level.WARNING, "Done Interpro analisys");
 		} else {
-			LoggerHelper.log(logger, Level.WARNING, "No domains file specified");
+			LoggerHelper.log(logger, Level.WARNING, "No domains file or Interpro command line specified");
 		}
 		LoggerHelper.log(logger, Level.INFO, "Total added %,d domains to %,d unique proteins",totalAddedDomains.intValue(), ret.size());
 		if (totalSkippedLines.intValue()>0) {
@@ -948,6 +1019,30 @@ public class ABAQS implements BatchRunnableCli {
 		return ret;
 	}
 
+	private Map<String, Set<PfamDomain>> loadDomains(Logger logger, Path input, Pattern domainsProteinMapper, MutableInt totalAddedDomains, MutableInt totalSkippedLines, boolean verbose) throws IOException {
+		Map<String, Set<PfamDomain>> ret = new HashMap<>();
+		try (BufferedReader reader = FilesHelper.newBufferedReaderOptionallyGzipped(input)) {
+			reader.lines().forEach(line->{
+				Matcher m = domainsProteinMapper.matcher(line);
+				if (m.matches()) {
+					String proteinId = m.group("id");
+					String pfam = m.group("domain").toLowerCase();
+					ret.computeIfAbsent(proteinId, id->new HashSet<>()).add(PfamDomain.of(pfam));
+					totalAddedDomains.increment();
+					if (verbose) {
+						LoggerHelper.log(logger, Level.INFO, "Added domain '%s' to protein '%s'",pfam,proteinId);
+					}
+				} else {
+					totalSkippedLines.increment();
+					if (verbose) {
+						LoggerHelper.log(logger, Level.WARNING, "Skipped line in domains file:'%s'",line);
+					}
+				}
+			});
+		}
+		return ret;
+	}
+	
 	private Map<String, SimpleFastaSequenceWithIdAndExtra> translateProteinsFastaWithIdMapper(Logger logger, GFF3Data gffData, Gff3RecordIdMapper gff3ProteinIdMapper, GeneCode geneCode, boolean verbose) {
 		LoggerHelper.log(logger, Level.INFO,"Translating proteins from gff3 data using gcode '%s(%d)'",geneCode.names[0],geneCode.id);
 		Map<String, SimpleFastaSequenceWithIdAndExtra> ret = new HashMap<>();
@@ -961,7 +1056,7 @@ public class ABAQS implements BatchRunnableCli {
 						LoggerHelper.log(logger, Level.WARNING,"GFF record '%s' have overhang after translation:'%s'",rec.id,aminoacidSequence.overhang);
 					}
 					if (proteinId!=null) {
-						ret.put(proteinId, new SimpleFastaSequenceWithIdAndExtra(proteinId, rec.id, aminoacidSequence.output, SequenceType.aminoacid));
+						ret.put(proteinId, new SimpleFastaSequenceWithIdAndExtra(proteinId, String.format("%s:%s", rec.parent.id,rec.id), aminoacidSequence.output, SequenceType.aminoacid));
 					} else {
 						LoggerHelper.log(logger, Level.WARNING, "Skipped mRNA '%s' protein id mapper return 'null'",rec);
 					}
@@ -1004,6 +1099,14 @@ public class ABAQS implements BatchRunnableCli {
 		return ret;
 	}
 
+	private void dumpFasta(Map<String, SimpleFastaSequenceWithIdAndExtra> sequences, Path outputProteinsFasta, int fastaWidth, boolean removeStopCodons) throws IOException {
+		try (PrintWriter wr=FilesHelper.newPrintWriterOrNull(outputProteinsFasta)) {
+			sequences.values().stream().sorted((s1,s2)->TextHelper.compareStringAndNumbers(s1.id, s2.id)).forEach(sequence->{
+				wr.print(SequenceHelper.formatAsFastaWithId(sequence.id, sequence.extra, fastaWidth, sequence.sequence, false, removeStopCodons));
+			});
+		}
+		
+	}
 	private static void showJava(Logger logger) {
 		String runtimeName = System.getProperty("java.runtime.name","N/S");
 		String runtimeVersion = System.getProperty("java.runtime.version","N/S");

@@ -12,6 +12,7 @@ public class SequenceHelper {
 	static final Pattern NUCLEOTYDE_SEQUENCE_VALID = Pattern.compile("[atcgnx]+",Pattern.CASE_INSENSITIVE);
 	static final Pattern AMINOACID_SEQUENCE_VALID = Pattern.compile("[arndcqeghilkmfpstwyuvbzx]+\\*?",Pattern.CASE_INSENSITIVE);
 	static final Pattern AMINOACID_STOPS = Pattern.compile("^[\\*]+$",Pattern.CASE_INSENSITIVE);
+	static final Pattern STOP_CODON = Pattern.compile("[\\*]+$",Pattern.CASE_INSENSITIVE);
 	public static final SequenceValidationResponse validateNucleotideSequence(String sequence, SequenceValidateOption option) {
 		return SequenceContent.nucleotide.validateSequence(sequence,option);
 	}
@@ -19,7 +20,7 @@ public class SequenceHelper {
 		return SequenceContent.aminoacid.validateSequence(sequence,option);
 	}
 	
-	public static final String formatAsFastaWithId(String id, String extra, int maxWidth, String sequence, boolean commentOut) {
+	public static final String formatAsFastaWithId(String id, String extra, int maxWidth, String sequence, boolean commentOut, boolean removeStopCodons) {
 		StringBuilder ret = new StringBuilder();
 		if (commentOut) {
 			ret.append(';');
@@ -31,7 +32,7 @@ public class SequenceHelper {
 			ret.append(extra);
 		}
 		ret.append('\n');
-		for (String s:splitSequence(maxWidth, sequence)) {
+		for (String s:splitSequence(maxWidth, sequence, removeStopCodons)) {
 			if (commentOut) {
 				ret.append(';');
 			}
@@ -41,19 +42,24 @@ public class SequenceHelper {
 		return ret.toString();
 	}
 
+	public static final String formatAsFastaWithId(String id, String extra, int maxWidth, String sequence, boolean commentOut) {
+		return formatAsFastaWithId(id, extra, maxWidth, sequence, commentOut, false);
+	}
+	
 	public static final String formatAsFastaWithId(String id, int maxWidth, String sequence) {
-		return formatAsFastaWithId(id, null, maxWidth, sequence, false);
+		return formatAsFastaWithId(id, null, maxWidth, sequence, false, false);
 	}
 
 	public static final String formatAsFastaWithId(String id, int maxWidth, String sequence, boolean commentOut) {
-		return formatAsFastaWithId(id, null, maxWidth, sequence, commentOut);
+		return formatAsFastaWithId(id, null, maxWidth, sequence, commentOut, false);
 	}
 
-	private static final List<String> splitSequence(int maxWidth, String sequence) {
+	private static final List<String> splitSequence(int maxWidth, String sequence, boolean removeStopCodons) {
 		List<String> ret = new ArrayList<>(); 
 		int start=0;
-		while (start<sequence.length()) {
-			ret.add(TextHelper.safeSubstring(sequence,start,start+maxWidth));
+		String seq=removeStopCodons?STOP_CODON.matcher(sequence).replaceAll(""):sequence;
+		while (start<seq.length()) {
+			ret.add(TextHelper.safeSubstring(seq,start,start+maxWidth));
 			start+=maxWidth;
 		}
 		return ret;
