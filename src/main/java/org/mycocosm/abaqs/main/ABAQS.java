@@ -70,6 +70,7 @@ import org.mycocosm.ncbi.GeneCode;
 import org.mycocosm.ncbi.GeneCode.TranslationResult;
 import org.mycocosm.ncbi.GeneCodeHelper;
 import org.mycocosm.sequence.SequenceHelper;
+import org.mycocosm.sequence.SequenceHelper.StopCodonsRemove;
 
 /*
  * IS 2026-09-04
@@ -294,7 +295,7 @@ public class ABAQS implements BatchRunnableCli {
 		}
 		if (outputProteinsFasta!=null) {
 			LoggerHelper.log(logger, Level.INFO, "Writing proteins fasta to '%s'", outputProteinsFasta);
-			dumpFasta(proteins, outputProteinsFasta, fastaWidth, false);
+			dumpFasta(proteins, outputProteinsFasta, fastaWidth, StopCodonsRemove.none);
 			LoggerHelper.log(logger, Level.INFO, "Wrote total %,d protein sequences", proteins.size());
 		}
 		final Map<String, Set<PfamDomain>> domains = loadOrComputePfamDomains(logger, inputDomains, domainsProteinMapper, verbose, proteins, workingDir, interproCommand, fastaWidth);
@@ -748,7 +749,7 @@ public class ABAQS implements BatchRunnableCli {
 			Path buscoWorkingDir = workingDir.resolve("busco");
 			FilesHelper.createFolder(buscoWorkingDir);
 			Path buscoProteinFasta = buscoWorkingDir.resolve("busco-proteins.fasta");
-			dumpFasta(proteins, buscoProteinFasta, fastaWidth, false);
+			dumpFasta(proteins, buscoProteinFasta, fastaWidth, StopCodonsRemove.none);
 			Path buscoOutput = buscoWorkingDir.resolve("busco-output");
 			CollectionsHelper.addAll(command, "--mode", "prot", "--in", buscoProteinFasta.getFileName().toString(), "--out", buscoOutput.getFileName().toString(), "--force");
 			LoggerHelper.log(logger, Level.INFO, "Computing BUSCO using command line '%s'", command.stream().collect(Collectors.joining(" ")));
@@ -995,7 +996,7 @@ public class ABAQS implements BatchRunnableCli {
 			Path interproWorkingDir = workingDir.resolve("interpro");
 			FilesHelper.createFolder(interproWorkingDir);
 			Path interproProteinFasta = interproWorkingDir.resolve("interpro-proteins.fasta");
-			dumpFasta(proteins, interproProteinFasta, fastaWidth, true);
+			dumpFasta(proteins, interproProteinFasta, fastaWidth, StopCodonsRemove.all);
 			Path interproDomainsOutput = interproWorkingDir.resolve("interpro-domains.tsv");
 			CollectionsHelper.addAll(command, "--input", interproProteinFasta.toString(), "--outfile", interproDomainsOutput.toString());
 			LoggerHelper.log(logger, Level.INFO, "Computing Interpro using command line '%s'", command.stream().collect(Collectors.joining(" ")));
@@ -1099,7 +1100,7 @@ public class ABAQS implements BatchRunnableCli {
 		return ret;
 	}
 
-	private void dumpFasta(Map<String, SimpleFastaSequenceWithIdAndExtra> sequences, Path outputProteinsFasta, int fastaWidth, boolean removeStopCodons) throws IOException {
+	private void dumpFasta(Map<String, SimpleFastaSequenceWithIdAndExtra> sequences, Path outputProteinsFasta, int fastaWidth, StopCodonsRemove removeStopCodons) throws IOException {
 		try (PrintWriter wr=FilesHelper.newPrintWriterOrNull(outputProteinsFasta)) {
 			sequences.values().stream().sorted((s1,s2)->TextHelper.compareStringAndNumbers(s1.id, s2.id)).forEach(sequence->{
 				wr.print(SequenceHelper.formatAsFastaWithId(sequence.id, sequence.extra, fastaWidth, sequence.sequence, false, removeStopCodons));
