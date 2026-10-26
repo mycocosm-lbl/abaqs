@@ -70,6 +70,7 @@ import org.mycocosm.ncbi.GeneCode;
 import org.mycocosm.ncbi.GeneCode.TranslationResult;
 import org.mycocosm.ncbi.GeneCodeHelper;
 import org.mycocosm.sequence.SequenceHelper;
+import org.mycocosm.sequence.SequenceValidateOption;
 import org.mycocosm.sequence.SequenceHelper.StopCodonsRemove;
 
 /*
@@ -278,7 +279,15 @@ public class ABAQS implements BatchRunnableCli {
 		try (BufferedReader inputReader = FilesHelper.newBufferedReaderOptionallyGzipped(inputGff)) {
 			gffData = GFF3Data.parse(logger, inputReader, false, gffInputParserSupport);
 		}
-		LoggerHelper.log(logger, Level.INFO, "Data loaded, total %,d records (%,d genes)",gffData.records.size(),gffData.records.stream().filter(Gff3Record::filterForTopLevelRegularRecords).count());
+		LoggerHelper.log(logger, Level.INFO, "Data loaded, total %,d records (%,d top-level records)",gffData.records.size(),gffData.records.stream().filter(Gff3Record::filterForTopLevelRegularRecords).count());
+		LoggerHelper.log(logger, Level.INFO, "Top records counts by type");
+		CollectionsHelper.groupBy(gffData.records.stream().filter(Gff3Record::filterForTopLevelRegularRecords).collect(Collectors.toList()),r->r.type).entrySet().stream().sorted((e1,e2)->Integer.compare(e2.getValue().size(), e1.getValue().size())).forEach(entry->{
+			LoggerHelper.log(logger, Level.INFO, "%s:\t%,d", entry.getKey(),entry.getValue().size());
+		});
+		LoggerHelper.log(logger, Level.INFO, "All records counts by type");
+		CollectionsHelper.groupBy(gffData.getRecordsByPredicate(Gff3Record::filterForRegularRecords),r->r.type).entrySet().stream().sorted((e1,e2)->Integer.compare(e2.getValue().size(), e1.getValue().size())).forEach(entry->{
+			LoggerHelper.log(logger, Level.INFO, "%s:\t%,d", entry.getKey(),entry.getValue().size());
+		});
 		if (inputScaffoldsFasta!=null) {
 			Map<String, SimpleFastaSequenceWithId> scaffolds = loadScaffoldsFasta(logger, inputScaffoldsFasta);
 			gffData = gffData.replaceScaffolds(scaffolds);
@@ -295,7 +304,7 @@ public class ABAQS implements BatchRunnableCli {
 		}
 		if (outputProteinsFasta!=null) {
 			LoggerHelper.log(logger, Level.INFO, "Writing proteins fasta to '%s'", outputProteinsFasta);
-			dumpFasta(proteins, outputProteinsFasta, fastaWidth, StopCodonsRemove.none);
+			dumpFasta(logger,proteins, outputProteinsFasta, fastaWidth, StopCodonsRemove.none);
 			LoggerHelper.log(logger, Level.INFO, "Wrote total %,d protein sequences", proteins.size());
 		}
 		final Map<String, Set<PfamDomain>> domains = loadOrComputePfamDomains(logger, inputDomains, domainsProteinMapper, verbose, proteins, workingDir, interproCommand, fastaWidth);
@@ -720,9 +729,8 @@ public class ABAQS implements BatchRunnableCli {
 		final MutableInt incompleteGenesCount = new MutableInt();
 
 		geneRecords.forEach((id,record)->{
-			String proteinSeq = record.protein.sequence;
-			if (proteinSeq.length()>0) {
-				if (proteinSeq.charAt(0)!='M' || proteinSeq.charAt(proteinSeq.length()-1)!='*') {
+			if (record.protein!=null && record.protein.sequence.length()>0) {
+				if (record.protein.sequence.charAt(0)!='M' || record.protein.sequence.charAt(record.protein.sequence.length()-1)!='*') {
 					incompleteGenesCount.increment();
 					if (verbose) LoggerHelper.log(logger, Level.INFO, "Incomplete gene: [%s]:'%s'", record.mRNA.id,record.protein.sequence);
 				}
@@ -749,7 +757,7 @@ public class ABAQS implements BatchRunnableCli {
 			Path buscoWorkingDir = workingDir.resolve("busco");
 			FilesHelper.createFolder(buscoWorkingDir);
 			Path buscoProteinFasta = buscoWorkingDir.resolve("busco-proteins.fasta");
-			dumpFasta(proteins, buscoProteinFasta, fastaWidth, StopCodonsRemove.none);
+			dumpFasta(logger, proteins, buscoProteinFasta, fastaWidth, StopCodonsRemove.none);
 			Path buscoOutput = buscoWorkingDir.resolve("busco-output");
 			CollectionsHelper.addAll(command, "--mode", "prot", "--in", buscoProteinFasta.getFileName().toString(), "--out", buscoOutput.getFileName().toString(), "--force");
 			LoggerHelper.log(logger, Level.INFO, "Computing BUSCO using command line '%s'", command.stream().collect(Collectors.joining(" ")));
@@ -903,7 +911,7 @@ public class ABAQS implements BatchRunnableCli {
 	private Map<String,GeneRecord> createGeneRecords(Logger logger, GFF3Data gffData, MaskerFunction maskerFunction,  Map<String, SimpleFastaSequenceWithIdAndExtra> effectiveProteins, Map<String, Set<PfamDomain>> domains, Gff3RecordIdMapper gff3ProteinIdMapper, Set<PfamDomain> transposableElements, Set<PfamDomain> suspectedTransposableElements, double noDomainCDSMaskedCutoff, double suspectedDomainCDSMaskedCutoff, boolean verbose) {
 		Map<String,GeneRecord> ret = new HashMap<>();
 
-		gffData.records.forEach(geneRecord->{
+		gffData.records.stream().filter(r->Gff3Type.gene.equals(r.type)).forEach(geneRecord->{
 			List<Gff3Record> mRNAs = geneRecord.getAllByPredicateInclusive(r->Gff3Type.mRNA.equals(r.type));
 			mRNAs.stream().forEach(mRNA->{
 				MutableInt cdsStart = new MutableInt(Integer.MAX_VALUE);
@@ -996,7 +1004,7 @@ public class ABAQS implements BatchRunnableCli {
 			Path interproWorkingDir = workingDir.resolve("interpro");
 			FilesHelper.createFolder(interproWorkingDir);
 			Path interproProteinFasta = interproWorkingDir.resolve("interpro-proteins.fasta");
-			dumpFasta(proteins, interproProteinFasta, fastaWidth, StopCodonsRemove.all);
+			dumpFasta(logger, proteins, interproProteinFasta, fastaWidth, StopCodonsRemove.all);
 			Path interproDomainsOutput = interproWorkingDir.resolve("interpro-domains.tsv");
 			CollectionsHelper.addAll(command, "--input", interproProteinFasta.toString(), "--outfile", interproDomainsOutput.toString());
 			LoggerHelper.log(logger, Level.INFO, "Computing Interpro using command line '%s'", command.stream().collect(Collectors.joining(" ")));
@@ -1047,7 +1055,7 @@ public class ABAQS implements BatchRunnableCli {
 	private Map<String, SimpleFastaSequenceWithIdAndExtra> translateProteinsFastaWithIdMapper(Logger logger, GFF3Data gffData, Gff3RecordIdMapper gff3ProteinIdMapper, GeneCode geneCode, boolean verbose) {
 		LoggerHelper.log(logger, Level.INFO,"Translating proteins from gff3 data using gcode '%s(%d)'",geneCode.names[0],geneCode.id);
 		Map<String, SimpleFastaSequenceWithIdAndExtra> ret = new HashMap<>();
-		gffData.getRecordsByPredicate(r->Gff3Type.mRNA.equals(r.type)).forEach(rec->{
+		gffData.getRecordsByPredicate(Gff3Record::filterForAminoacidsCodingGenes).forEach(rec->{
 			try {
 				SimpleFastaSequenceWithId scaffold = gffData.scaffolds.get(rec.seqid);
 				if (scaffold!=null) {
@@ -1057,7 +1065,11 @@ public class ABAQS implements BatchRunnableCli {
 						LoggerHelper.log(logger, Level.WARNING,"GFF record '%s' have overhang after translation:'%s'",rec.id,aminoacidSequence.overhang);
 					}
 					if (proteinId!=null) {
-						ret.put(proteinId, new SimpleFastaSequenceWithIdAndExtra(proteinId, String.format("%s:%s", rec.parent.id,rec.id), aminoacidSequence.output, SequenceType.aminoacid));
+						if (!TextHelper.isNullOrEmpty(aminoacidSequence.output)) {
+							ret.put(proteinId, new SimpleFastaSequenceWithIdAndExtra(proteinId, String.format("%s:%s", rec.parent.id,rec.id), aminoacidSequence.output, SequenceType.aminoacid));
+						} else {
+							LoggerHelper.log(logger, Level.WARNING, "Skipped mRNA '%s': empty aminoacid sequence",rec);
+						}
 					} else {
 						LoggerHelper.log(logger, Level.WARNING, "Skipped mRNA '%s' protein id mapper return 'null'",rec);
 					}
@@ -1100,9 +1112,14 @@ public class ABAQS implements BatchRunnableCli {
 		return ret;
 	}
 
-	private void dumpFasta(Map<String, SimpleFastaSequenceWithIdAndExtra> sequences, Path outputProteinsFasta, int fastaWidth, StopCodonsRemove removeStopCodons) throws IOException {
+	private void dumpFasta(Logger logger, Map<String, SimpleFastaSequenceWithIdAndExtra> sequences, Path outputProteinsFasta, int fastaWidth, StopCodonsRemove removeStopCodons) throws IOException {
 		try (PrintWriter wr=FilesHelper.newPrintWriterOrNull(outputProteinsFasta)) {
 			sequences.values().stream().sorted((s1,s2)->TextHelper.compareStringAndNumbers(s1.id, s2.id)).forEach(sequence->{
+				if (SequenceHelper.validateAminoacidSequence(sequence.sequence, SequenceValidateOption.hard).hasErrors()) {
+					LoggerHelper.log(logger, Level.WARNING, "Potentially invalid protein sequence");
+					LoggerHelper.log(logger, Level.WARNING, ">%s %s", sequence.id, sequence.extra);
+					LoggerHelper.log(logger, Level.WARNING, "%s", sequence.sequence);
+				}
 				String seq = SequenceHelper.processStopCodons(sequence.sequence, removeStopCodons);
 				if (!TextHelper.isNullOrEmpty(seq)) {
 					wr.print(SequenceHelper.formatAsFastaWithId(sequence.id, sequence.extra, fastaWidth, seq, false, StopCodonsRemove.none));

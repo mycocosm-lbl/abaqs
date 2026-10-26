@@ -235,10 +235,6 @@ public class Gff3Record {
 			return Integer.valueOf(str);
 		}
 	}
-
-
-
-
 	public int length() {
 		return Math.abs(end-start);
 	}
@@ -356,7 +352,14 @@ public class Gff3Record {
 	}
 
 	public static final boolean filterForTopLevelRegularRecords(Gff3Record rec) {
-		return Gff3RecordCategory.regular.equals(rec.catergory) && rec.parent==null;
+		return filterForRegularRecords(rec) && rec.parent==null;
+	}
+	public static final boolean filterForRegularRecords(Gff3Record rec) {
+		return Gff3RecordCategory.regular.equals(rec.catergory);
+	}
+	
+	public static final boolean filterForAminoacidsCodingGenes(Gff3Record rec) {
+		return filterForRegularRecords(rec) && Gff3Type.mRNA.equals(rec.type) && rec.parent!=null && Gff3Type.gene.equals(rec.parent.type);
 	}
 
 	public List<Gff3Record> getAllByPredicateInclusive(Predicate<Gff3Record> predicate) {
