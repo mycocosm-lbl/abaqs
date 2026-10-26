@@ -17,6 +17,7 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.function.Predicate;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import java.util.regex.Matcher;
@@ -282,11 +283,11 @@ public class ABAQS implements BatchRunnableCli {
 		LoggerHelper.log(logger, Level.INFO, "Data loaded, total %,d records (%,d top-level records)",gffData.records.size(),gffData.records.stream().filter(Gff3Record::filterForTopLevelRegularRecords).count());
 		LoggerHelper.log(logger, Level.INFO, "Top records counts by type");
 		CollectionsHelper.groupBy(gffData.records.stream().filter(Gff3Record::filterForTopLevelRegularRecords).collect(Collectors.toList()),r->r.type).entrySet().stream().sorted((e1,e2)->Integer.compare(e2.getValue().size(), e1.getValue().size())).forEach(entry->{
-			LoggerHelper.log(logger, Level.INFO, "%s:\t%,d", entry.getKey(),entry.getValue().size());
+			LoggerHelper.log(logger, Level.INFO, "%s:\t%,d", gffInputParserSupport.fromType(entry.getKey()),entry.getValue().size());
 		});
 		LoggerHelper.log(logger, Level.INFO, "All records counts by type");
 		CollectionsHelper.groupBy(gffData.getRecordsByPredicate(Gff3Record::filterForRegularRecords),r->r.type).entrySet().stream().sorted((e1,e2)->Integer.compare(e2.getValue().size(), e1.getValue().size())).forEach(entry->{
-			LoggerHelper.log(logger, Level.INFO, "%s:\t%,d", entry.getKey(),entry.getValue().size());
+			LoggerHelper.log(logger, Level.INFO, "%s:\t%,d", gffInputParserSupport.fromType(entry.getKey()),entry.getValue().size());
 		});
 		if (inputScaffoldsFasta!=null) {
 			Map<String, SimpleFastaSequenceWithId> scaffolds = loadScaffoldsFasta(logger, inputScaffoldsFasta);
@@ -300,8 +301,9 @@ public class ABAQS implements BatchRunnableCli {
 		if (inputProteinsFasta!=null) { // have proteins to load
 			proteins = loadProteinsFastaWithIdMapper(logger, inputProteinsFasta, proteinFastaProteinIdMapper);
 		} else { // will translate proteins
-			proteins = translateProteinsFastaWithIdMapper(logger, gffData, gff3ProteinIdMapper, ncbiGeneCode, verbose);
+			proteins = translateProteinsFastaWithIdMapper(logger, gffData, gff3ProteinIdMapper, gffInputParserSupport.geneCodingPredicate(), ncbiGeneCode, verbose);
 		}
+		LoggerHelper.log(logger, Level.INFO, "Total %,d proteins", proteins.size());
 		if (outputProteinsFasta!=null) {
 			LoggerHelper.log(logger, Level.INFO, "Writing proteins fasta to '%s'", outputProteinsFasta);
 			dumpFasta(logger,proteins, outputProteinsFasta, fastaWidth, StopCodonsRemove.none);
@@ -314,7 +316,7 @@ public class ABAQS implements BatchRunnableCli {
 		BuscoData buscoData = computeOrLoadBuscoData(logger, buscoDataString, buscoDataFile, proteins, workingDir, buscoCommand, fastaWidth);
 		Map<Integer,Double> referenceProteinLengthDitribution = loadReferenceProteinLengthDistribution(logger,referenceProteinLengthDistributionFile);
 
-		final Map<String /* mRNA.id */,GeneRecord> geneRecords = createGeneRecords(logger, gffData, maskerFunction, proteins, domains, gff3ProteinIdMapper, transposableElements, suspectedTransposableElements, noDomainCDSMaskedCutoff, suspectedDomainCDSMaskedCutoff, verbose);
+		final Map<String /* mRNA.id */,GeneRecord> geneRecords = createGeneRecords(logger, gffData, maskerFunction, proteins, domains, gff3ProteinIdMapper, gffInputParserSupport.geneCodingPredicate(), transposableElements, suspectedTransposableElements, noDomainCDSMaskedCutoff, suspectedDomainCDSMaskedCutoff, verbose);
 		if (verbose) {
 			LoggerHelper.log(logger, Level.INFO, "Total collected %,d mRNA records for analisys",geneRecords.size());
 		}
@@ -369,7 +371,7 @@ public class ABAQS implements BatchRunnableCli {
 			}
 		});
 
-		final Map<String /* mRNA.id */,GeneRecord> filteredGeneRecords = createGeneRecords(logger, filteredGff, maskerFunction, proteins, domains, gff3ProteinIdMapper, transposableElements, suspectedTransposableElements, noDomainCDSMaskedCutoff, suspectedDomainCDSMaskedCutoff, verbose);
+		final Map<String /* mRNA.id */,GeneRecord> filteredGeneRecords = createGeneRecords(logger, filteredGff, maskerFunction, proteins, domains, gff3ProteinIdMapper, gffInputParserSupport.geneCodingPredicate(), transposableElements, suspectedTransposableElements, noDomainCDSMaskedCutoff, suspectedDomainCDSMaskedCutoff, verbose);
 		if (verbose) {
 			LoggerHelper.log(logger, Level.INFO, "Total collected %,d mRNA records for analisys after filtering",geneRecords.size());
 		}
@@ -730,7 +732,7 @@ public class ABAQS implements BatchRunnableCli {
 
 		geneRecords.forEach((id,record)->{
 			if (record.protein!=null && record.protein.sequence.length()>0) {
-				if (record.protein.sequence.charAt(0)!='M' || record.protein.sequence.charAt(record.protein.sequence.length()-1)!='*') {
+				if (!hasStartCodon(record) || !hasStopCodon(record)) {
 					incompleteGenesCount.increment();
 					if (verbose) LoggerHelper.log(logger, Level.INFO, "Incomplete gene: [%s]:'%s'", record.mRNA.id,record.protein.sequence);
 				}
@@ -738,6 +740,13 @@ public class ABAQS implements BatchRunnableCli {
 		});
 		LoggerHelper.log(logger, Level.INFO, "Found %,d incomplete genes",incompleteGenesCount.intValue());
 		return 1.0 - incompleteGenesCount.doubleValue() / (double) geneRecords.size();
+	}
+
+	private boolean hasStartCodon(GeneRecord record) {
+		return TextHelper.nullSafeCharAtWithPredicate(record.protein.sequence, 0, c->c=='M') || record.mRNA.children.stream().anyMatch(c->Gff3Type.start_codon.equals(c.type)); 
+	}
+	private boolean hasStopCodon(GeneRecord record) {
+		return TextHelper.nullSafeCharEndingPredicate(record.protein.sequence,c->c=='*') || record.mRNA.children.stream().anyMatch(c->Gff3Type.stop_codon.equals(c.type)); 
 	}
 
 	//  short_summary.specific.hypocreaceae_odb12.busco_output_2.txt
@@ -908,11 +917,11 @@ public class ABAQS implements BatchRunnableCli {
 	}
 
 
-	private Map<String,GeneRecord> createGeneRecords(Logger logger, GFF3Data gffData, MaskerFunction maskerFunction,  Map<String, SimpleFastaSequenceWithIdAndExtra> effectiveProteins, Map<String, Set<PfamDomain>> domains, Gff3RecordIdMapper gff3ProteinIdMapper, Set<PfamDomain> transposableElements, Set<PfamDomain> suspectedTransposableElements, double noDomainCDSMaskedCutoff, double suspectedDomainCDSMaskedCutoff, boolean verbose) {
+	private Map<String,GeneRecord> createGeneRecords(Logger logger, GFF3Data gffData, MaskerFunction maskerFunction,  Map<String, SimpleFastaSequenceWithIdAndExtra> effectiveProteins, Map<String, Set<PfamDomain>> domains, Gff3RecordIdMapper gff3ProteinIdMapper, Predicate<Gff3Record> geneCodingPredicate, Set<PfamDomain> transposableElements, Set<PfamDomain> suspectedTransposableElements, double noDomainCDSMaskedCutoff, double suspectedDomainCDSMaskedCutoff, boolean verbose) {
 		Map<String,GeneRecord> ret = new HashMap<>();
 
 		gffData.records.stream().filter(r->Gff3Type.gene.equals(r.type)).forEach(geneRecord->{
-			List<Gff3Record> mRNAs = geneRecord.getAllByPredicateInclusive(r->Gff3Type.mRNA.equals(r.type));
+			List<Gff3Record> mRNAs = geneRecord.getAllByPredicateInclusive(geneCodingPredicate);
 			mRNAs.stream().forEach(mRNA->{
 				MutableInt cdsStart = new MutableInt(Integer.MAX_VALUE);
 				MutableInt cdsEnd = new MutableInt(Integer.MIN_VALUE);
@@ -1052,10 +1061,10 @@ public class ABAQS implements BatchRunnableCli {
 		return ret;
 	}
 	
-	private Map<String, SimpleFastaSequenceWithIdAndExtra> translateProteinsFastaWithIdMapper(Logger logger, GFF3Data gffData, Gff3RecordIdMapper gff3ProteinIdMapper, GeneCode geneCode, boolean verbose) {
+	private Map<String, SimpleFastaSequenceWithIdAndExtra> translateProteinsFastaWithIdMapper(Logger logger, GFF3Data gffData, Gff3RecordIdMapper gff3ProteinIdMapper, Predicate<Gff3Record> geneCodingRecordsPredicate, GeneCode geneCode, boolean verbose) {
 		LoggerHelper.log(logger, Level.INFO,"Translating proteins from gff3 data using gcode '%s(%d)'",geneCode.names[0],geneCode.id);
 		Map<String, SimpleFastaSequenceWithIdAndExtra> ret = new HashMap<>();
-		gffData.getRecordsByPredicate(Gff3Record::filterForAminoacidsCodingGenes).forEach(rec->{
+		gffData.getRecordsByPredicate(geneCodingRecordsPredicate).forEach(rec->{
 			try {
 				SimpleFastaSequenceWithId scaffold = gffData.scaffolds.get(rec.seqid);
 				if (scaffold!=null) {

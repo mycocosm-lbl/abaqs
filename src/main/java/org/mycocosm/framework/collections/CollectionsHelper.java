@@ -23,6 +23,7 @@ import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 import org.mycocosm.framework.comparators.StackableComparator;
+import org.mycocosm.framework.utils.ExceptionsHelper;
 import org.mycocosm.framework.utils.KeyValue;
 
 public final class CollectionsHelper {
@@ -703,8 +704,12 @@ public final class CollectionsHelper {
 	private static final <T> List<BinEntry<T>> toSortedBinEntryList(Collection<T> data, ToBinValue<T> toBinValue) {
 		List<BinEntry<T>> ret = new ArrayList<>();
 		for (T entry:data) {
-			double binValue = toBinValue.toBinValue(entry);
-			ret.add(new BinEntry<T>(binValue, entry));
+			try {
+				double binValue = toBinValue.toBinValue(entry);
+				ret.add(new BinEntry<T>(binValue, entry));
+			} catch (Exception e) {
+				throw ExceptionsHelper.newRuntimeException("Exception while processing '%s'", entry.toString());
+			}
 		}
 		Collections.sort(ret, new Comparator<BinEntry<T>>() {
 

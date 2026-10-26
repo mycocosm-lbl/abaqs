@@ -15,6 +15,7 @@ import java.util.Map;
 import java.util.Map.Entry;
 import java.util.StringTokenizer;
 import java.util.function.Function;
+import java.util.function.Predicate;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
@@ -1733,6 +1734,25 @@ public class TextHelper {
 	}
 	public static final String getByIndexOrNull(String[] record, int index) {
 		return getByIndexOrElse(record, index, null);
+	}
+
+	public static final boolean nullSafeCharAtWithPredicate(String str, int pos, Predicate<Character> pred) {
+		if (!isNullOrEmpty(str)) {
+			if (pos>=0 && pos<str.length()) {
+				return pred.test(str.charAt(pos));
+			} else {
+				return false;
+			}
+		} else { 
+			return false;
+		}
+	}
+	public static final boolean nullSafeCharEndingPredicate(String str, Predicate<Character> pred) {
+		if (!isNullOrEmpty(str)) {
+			return nullSafeCharAtWithPredicate(str, str.length()-1, pred);
+		} else {
+			return false;
+		}
 	}
 }
 

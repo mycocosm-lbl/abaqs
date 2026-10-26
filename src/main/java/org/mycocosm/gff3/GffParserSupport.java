@@ -7,6 +7,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.function.Predicate;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
@@ -68,7 +69,9 @@ public enum GffParserSupport {
 		public String fromType(Gff3Type type) {
 			return type.name();
 		}
-		
+		public Predicate<Gff3Record> geneCodingPredicate() {
+			return Gff3Record::filterForAminoacidsCodingGenes;
+		}
 	}, 
 	gtf {
 		public Map<String,String> parseAttributes(String attributes) {
@@ -126,14 +129,19 @@ public enum GffParserSupport {
 			default: return type.name();
 			}
 		}
-
-		
 		private final Map<Gff3Type, MutableInt> idGenerator = new HashMap<>();
 		public String getId(Gff3Type type, Map<String,String> attributes) {
 			switch (type) {
 			case gene:
 			case mRNA:
-				return attributes.get(Gff3Record.ATTRIBUTE_ID);
+				String ret = attributes.get(Gff3Record.ATTRIBUTE_ID);
+				if (ret!=null) {
+					return ret;
+				} else {
+					String key = fromType(type)+"_id";
+					ret = attributes.get(key);
+					return ret;
+				}
 			default:
 				return String.format("%s_%d",type.name(),idGenerator.computeIfAbsent(type, k->new MutableInt()).getAndIncrement());
 			}
@@ -142,34 +150,49 @@ public enum GffParserSupport {
 			return record.id;
 		};
 		public String toParentKey(Gff3Record record) {
-			switch (record.type) {
-			case gene:
-				return null; // always on the top
-			case mRNA:
-			case transcript:
-				String geneIdAttribute = record.attributes.get(GTF_GENE_ID_ATTRIBUTE);
-				if (geneIdAttribute!=null) {
-					return geneIdAttribute;
-				} else {
-					// let do a dirty hack: gene_id.transcript_id 
-					Matcher matcher = WHILD_GUESS_TRANSCRIPT_ID_PATTERN.matcher(record.id);
-					if (matcher.matches()) {
-						String geneId = matcher.group(1);
-						return geneId;
+			if (record.type!=null) {
+				switch (record.type) {
+				case gene:
+					return null; // always on the top
+				case mRNA:
+				case transcript:
+					String geneIdAttribute = record.attributes.get(GTF_GENE_ID_ATTRIBUTE);
+					if (geneIdAttribute!=null) {
+						return geneIdAttribute;
 					} else {
-						throw new RuntimeException(String.format("Unable to get parent id for transcript '%s'",record.id));
+						// let do a dirty hack: gene_id.transcript_id 
+						Matcher matcher = WHILD_GUESS_TRANSCRIPT_ID_PATTERN.matcher(record.id);
+						if (matcher.matches()) {
+							String geneId = matcher.group(1);
+							return geneId;
+						} else {
+							throw new RuntimeException(String.format("Unable to get parent id for transcript '%s'",record.id));
+						}
+					}
+				default:
+					String transcriptIdAttribute = record.attributes.get(GTF_TRANSCRIPT_ID_ATTRIBUTE);
+					if (transcriptIdAttribute!=null) {
+						return transcriptIdAttribute;
+					} else {
+						throw new RuntimeException(String.format("Unable to get parent id for %s '%s'",record.type,record.id));
 					}
 				}
-			default:
-				String transcriptIdAttribute = record.attributes.get(GTF_TRANSCRIPT_ID_ATTRIBUTE);
-				if (transcriptIdAttribute!=null) {
-					return transcriptIdAttribute;
-				} else {
-					throw new RuntimeException(String.format("Unable to get parent id for %s '%s'",record.type,record.id));
-				}
+			} else {
+				return null;
 			}
 		}
-
+		public Predicate<Gff3Record> geneCodingPredicate() {
+			return new Predicate<Gff3Record>() {
+				@Override
+				public boolean test(Gff3Record mRNA) {
+					if (Gff3Record.filterForAminoacidsCodingGenes(mRNA)) {
+						return !TextHelper.nullSafeToBooleanExtended(mRNA.attributes.get("pseudo"), false);
+					} else {
+						return false;
+					}
+				}
+			};
+		}
 	};
 	private static final Pattern GFF_ATTRIBUTES_SPLIT = Pattern.compile(";");
 	private static final Pattern GFF_ATTRIBUTE_PARSE = Pattern.compile("(\\S+)=(.*)");
@@ -178,11 +201,11 @@ public enum GffParserSupport {
 	private static final Pattern GTF_SINGLE_ATTRIBUTE_VALUE_PARSE = Pattern.compile("\\S+");
 	private static final Pattern ESCAPED = Pattern.compile("%([a-f,\\d]{2,2})",Pattern.CASE_INSENSITIVE);
 	private static final Pattern WHILD_GUESS_TRANSCRIPT_ID_PATTERN = Pattern.compile("(\\w+)\\.(\\w+)");
-	
+
 	private static final String GTF_GENE_ID_ATTRIBUTE = "gene_id";
 	private static final String GTF_TRANSCRIPT_ID_ATTRIBUTE = "transcript_id";
 	private static final Set<String> EXCLUDED_ATTRIBUTES_GTF = CollectionsHelper.asSet(GTF_GENE_ID_ATTRIBUTE,GTF_TRANSCRIPT_ID_ATTRIBUTE, Gff3Record.ATTRIBUTE_ID, Gff3Record.ATTRIBUTE_PARENT);
-	
+
 	private static final String getAncestorId(Gff3Record rec, Gff3Type idType) {
 		if (rec.type.equals(idType)) {
 			return rec.id;
@@ -192,7 +215,7 @@ public enum GffParserSupport {
 			return null;
 		}
 	}
-	
+
 	private static final String formatGffAttribute(String name, String value) {
 		return escape(name)+'='+escape(value);
 	}
@@ -284,7 +307,10 @@ In addition, the following characters have reserved meanings in column 9 and mus
 	public String fromType(Gff3Type type) {
 		throw new NotImplementedException();
 	}
-
+	public Predicate<Gff3Record> geneCodingPredicate() {
+//		 Gff3Record::filterForAminoacidsCodingGenes
+		throw new NotImplementedException();
+	}
 	//	private String formatAttributes() {
 	//		List<String> ret = new ArrayList<>();
 	//		if (id!=null) {

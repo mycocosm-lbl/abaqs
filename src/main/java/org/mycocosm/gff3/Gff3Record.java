@@ -359,7 +359,10 @@ public class Gff3Record {
 	}
 	
 	public static final boolean filterForAminoacidsCodingGenes(Gff3Record rec) {
-		return filterForRegularRecords(rec) && Gff3Type.mRNA.equals(rec.type) && rec.parent!=null && Gff3Type.gene.equals(rec.parent.type);
+		return filterForRegularRecords(rec) && Gff3Type.mRNA.equals(rec.type) && rec.parent!=null && Gff3Type.gene.equals(rec.parent.type) && hasCDS(rec);
+	}
+	public static boolean hasCDS(Gff3Record rec) {
+		return rec.children.stream().anyMatch(child->Gff3Type.CDS.equals(child.type));
 	}
 
 	public List<Gff3Record> getAllByPredicateInclusive(Predicate<Gff3Record> predicate) {
