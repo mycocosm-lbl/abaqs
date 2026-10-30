@@ -137,7 +137,7 @@ Copy this string from your BUSCO `short_summary*.txt` output file.
 -ibf /path/to/short_summary.specific.fungi_odb10.txt
 ```
 
-**Option C — let ABAQS run BUSCO automatically** (see [Automated Workflows](##Workflows) below).
+**Option C — let ABAQS run BUSCO automatically** (see [Workflows](#Workflows) below).
 
 If BUSCO data is omitted, ABAQS assumes a perfect BUSCO score, which will overestimate the final ABAQS for incomplete assemblies.
 
@@ -168,7 +168,7 @@ If omitted, ABAQS will skip Pfam-based TE detection.
 
 > **Tip:** At least 30% of proteins should have at least one Pfam domain. If fewer do, check that InterProScan completed successfully and that the correct format was used.
 
-**Option — let ABAQS run InterProScan automatically** (see [Automated Workflows](##Workflows) below).
+**Option — let ABAQS run InterProScan automatically** (see [Workflows](#Workflows) below).
 
 ---
 
