@@ -1,192 +1,431 @@
-# ABAQS
-Accuracy-Based Annotation Quality Score (ABAQS)
+# ABAQS User Guide
 
-# Abstract
+**Accuracy-Based Annotation Quality Score (ABAQS)**  
+Version 1.0 — Developed at the Lawrence Berkeley National Laboratory / Joint Genome Institute
 
-As fungal genome resources continue to expand, estimating the accuracy and completeness of genome annotations (e.g., gene and protein models) becomes essential to ensure quality of downstream analyses and applications. It becomes critical in comparative genomic analysis to select genomes with comparable qualities of assembly and annotation. Without careful scrutiny, inconsistencies in annotation quality can undermine downstream studies.
+---
 
-A robust quality metric should ideally capture multiple dimensions of genome annotation accuracy. However, in practice, most commonly used quality metrics are single-dimensional or consider only a few aspects of annotation quality, leaving a large space of high-scored but low-quality genome annotations unpenalized.
+## Overview
 
-To address this gap, we introduce the Accuracy-Based Annotation Quality Score (ABAQS), a comprehensive and minimal-data-driven method to summarize genome annotation quality as a single easily understandable numeric value. While developed primarily using fungal genomes from MycoCosm, ABAQS is broadly applicable across eukaryotes. ABAQS evaluates multiple factors, including genome completeness, gene model validity, and protein profile accuracy.
+ABAQS evaluates the quality of eukaryotic genome annotations as a single numeric score between 0 and 1. It was tested primarily using fungal genomes from MycoCosm and algal genomes in PhycoCosm, but is broadly applicable across eukaryotes.
 
-# Build and Installation
+Unlike single-dimensional metrics, ABAQS integrates multiple quality signals:
 
-## Prerequisites
-You need following prerequisites in order to build and run ABAQS:
+| Factor | What it measures |
+|--------|-----------------|
+| Protein length distribution (PLD) | How closely the proteome's size distribution matches a reference |
+| Incomplete genes | Proportion of gene models with both a start and stop codon |
+| Transposable elements (TE) | Proportion of TE-like gene models retained in the proteome |
+| Isoforms | Proportion of overlapping/duplicate gene models |
+| BUSCO completeness | Proportion of expected universal single-copy orthologs found |
+| BUSCO duplication | Estimated genome duplication from BUSCO |
 
-* git
-* Java SDK version >=21
-* MAVEN
+ABAQS reports scores **before and after filtering**. The post-filtering score reflects the annotation after automatically removing TE models and isoforms (retaining the longest isoform per locus).
 
-```
-Example how to install them on Ubuntu Linux
+---
 
+## Requirements
+
+### Software
+
+| Dependency | Version | Notes |
+|-----------|---------|-------|
+| Java | >= 11 | Runtime only; Java 21+ needed to build |
+| Maven | Any recent | Build only |
+| InterProScan | 5.x recommended | For Pfam domain prediction (or provide pre-computed results) |
+| BUSCO | 5.x or 6.x | For genome completeness (or provide pre-computed results) |
+
+### Installation on Ubuntu/Debian
+
+```bash
 sudo apt update
-
-Install git
-
-apt install git -y
-
-Install OpenJDK: Maven requires Java. Install the default JDK
-
-sudo apt install default-jdk -y
-
-Install Maven
-
-sudo apt install maven -y
-
-Verify Installation
-
-mvn -version
+sudo apt install git default-jdk maven -y
+mvn -version   # verify
 ```
 
-## Building
+---
 
-```
+## Building from Source
+
+```bash
 git clone https://github.com/mycocosm-lbl/abaqs.git
 cd abaqs
 mvn clean package
+```
+
+The executable JAR is produced at:
+
+```
+target/abaqs-jar-with-dependencies.jar
+```
+
+Quick test:
+
+```bash
 java -jar target/abaqs-jar-with-dependencies.jar
-
 ```
 
-## Running
-
-You can run ABAQS directly on host computer using Java runtime version >=21
-
-```
-java -jar target/abaqs-jar-with-dependencies.jar 
-```
-```
-usage:
-
-org.mycocosm.abaqs.main.ABAQS [options]
-
-options:
- -ig  --input-gff <arg>                            (required) path to the input gff3 or gtf file, type is detected by the file name extention                                                                                                            
- -is  --input-scaffolds-fasta <arg>                (recomended/required) assembly fasta file path, may be ommitted if the gff3 input file has embedded scaffolds fasta                                                                                   
- -ibf --busco-data-file <arg>                      (recomended) path to the busco data file, using native busco output format                                                                                                                            
- -ib  --busco-data <arg>                           (recomended if -ibf is not provided) busco data, like 'C:99.3%[S:98.9%,D:0.4%],F:0.3%,M:0.4%,n:758', if ommitted "ideal" BUSCO is assumed                                                             
- -md  --domains-protein-id-mapper <arg>            (recomended) mapper for protein id and domains in domains records, default='(?<id>\w+)\s+.*\s+\w*Pfam\s+(?<domain>[a-z]+\d+).*\s+.*'. See --input-domains and --input-proteins-fasta                  
- -id  --input-domains <arg>                        (recomended if -md is not used) input domains data file path, important note: used together with --domains-protein-id-mapper option to parse the input domains file                                   
- -mg  --gff3-protein-id-mapper <arg>               (optional) mapper for protein id in gff3 records, default='attributes:proteinId:.*->{0}' , meaning use proteinId attribute for gene record. Used in connection to --input-proteins-fasta              
- -mp  --protein-fasta-protein-id-mapper <arg>      (optional) mapper for protein id in protein fasta records, default='.+proteinId\s*=\s*(\d+).*->{1}'                                                                                                   
- -ip  --input-proteins-fasta <arg>                 (optional) input proteins fasta file path, if ommitted then ABAQS will translate genes data into aminoacids using provided gene translation table id (--gene-code)                                    
- -g   --gene-code <arg>                            (optional), NCBI gene code id to be used for translation, if needed, default=1                                                                                                                        
- -igc --gene-code-input-file <arg>                 (optional) gene code input file (gc.prt), if missing internal copy will be used, see --gene-code                                                                                                      
- -ilr --reference-protein-lengths-input-file <arg> (optional) reference protein length distribution file, if missing internal reference will be used                                                                                                     
- -io  --isoforms-min-overlap <arg>                 (optional) minimum overlap to detect genes isoforms by coding positions, default=0.25                                                                                                                 
- -ise --suspected-te-input-file <arg>              (optional) suspected transposable elements pfam domains input file, if missing internal list will be used                                                                                             
- -ite --te-input-file <arg>                        (optional) transposable elements pfam domains input file, if missing internal list will be used                                                                                                       
- -mf  --masker-function <arg>                      (optional) masker function used to detect repeatmasled parts of scaffold sequence, used in TE computation, see --no-domain-masked-cutoff and --suspected-domain-masked-cutoff, default='TO_LOWER_CASE'
- -ndc --no-domain-masked-cutoff <arg>              (optional) masked CDS cutoff for TE detection with no Pfam domains, NaN mean not used, default=0.2                                                                                                    
- -o   --output <arg>                               (optional) path for the results file, default will print to the console                                                                                                                               
- -fw  --fasta-width <arg>                          (optional output parameter) fasta output width, default=70. Used ONLY to produce fasta data embedded into the GFF3 output file, see --output-gff                                                      
- -og  --output-gff <arg>                           (optional) gff3 or gtf output path, will produce POST-filtering gff or gtdf output file, type detected by the file extention                                                                          
- -plb --protein-length-binning <arg>               (optional) protein length distribution binning, default=5                                                                                                                                             
- -sdc --suspected-domain-masked-cutoff <arg>       (optional) masked CDS cutoff for TE detection with suspected TE Pfam domains, NaN mean always TE, default=NaN                                                                                         
- -v   --verbose                                    (optional) produce verbose output                                                                                                                                                                     
- -vo  --verbose-output-folder <arg>                (optional) output folder for verbose output, will save supplemental data during computation  in that folder                                                                                           
-```
+---
 
 ## Docker
 
-We also maintain Docker image on the DockerHub so you can run it with docker
+A pre-built image is available on Docker Hub:
+
+```bash
+docker run mycocosm/abaqs:latest [options]
+```
+
+When using Docker, mount your data directory into the container:
+
+```bash
+docker run --rm \
+  -v /path/to/your/data:/data \
+  mycocosm/abaqs:latest \
+  -ig /data/input.gff3 \
+  -is /data/assembly.fasta \
+  -ib 'C:99.74%[S:91.16%,D:8.58%],F:0.26%,M:0.0%,n:758' \
+  -o /data/abaqs_results.txt
+```
+
+---
+
+## Required and Recommended Inputs
+
+ABAQS needs four pieces of data for a complete score. Two are required; two are strongly recommended.
+
+### 1. Assembly FASTA (`-is`) — required
+
+The genome assembly in FASTA format. **This must be softmasked** (repeat regions in lowercase) using a tool such as RepeatMasker. For best results, run RepeatMasker with `-nolow` to ignore simple/low-complexity repeats, since only transposon-related masking is relevant to the TE detection step.
 
 ```
-$ docker run mycocosm/abaqs:latest
-Error parsing command line: Missing required option: ig
- usage:
-    docker run mycocosm/abaqs:latest [options]
-
- options:
-  -ig  --input-gff <arg>                            (required) path to the input gff3 or gtf file, type is detected by the file name extention                                                                                                            
-  -is  --input-scaffolds-fasta <arg>                (recomended/required) assembly fasta file path, may be ommitted if the gff3 input file has embedded scaffolds fasta                                                                                   
-  -ibf --busco-data-file <arg>                      (recomended) path to the busco data file, using native busco output format                                                                                                                            
-  -ib  --busco-data <arg>                           (recomended if -ibf is not provided) busco data, like 'C:99.3%[S:98.9%,D:0.4%],F:0.3%,M:0.4%,n:758', if ommitted "ideal" BUSCO is assumed                                                             
-  -md  --domains-protein-id-mapper <arg>            (recomended) mapper for protein id and domains in domains records, default='(?<id>\w+)\s+.*\s+\w*Pfam\s+(?<domain>[a-z]+\d+).*\s+.*'. See --input-domains and --input-proteins-fasta                  
-  -id  --input-domains <arg>                        (recomended if -md is not used) input domains data file path, important note: used together with --domains-protein-id-mapper option to parse the input domains file                                   
-  -mg  --gff3-protein-id-mapper <arg>               (optional) mapper for protein id in gff3 records, default='attributes:proteinId:.*->{0}' , meaning use proteinId attribute for gene record. Used in connection to --input-proteins-fasta              
-  -mp  --protein-fasta-protein-id-mapper <arg>      (optional) mapper for protein id in protein fasta records, default='.+proteinId\s*=\s*(\d+).*->{1}'                                                                                                   
-  -ip  --input-proteins-fasta <arg>                 (optional) input proteins fasta file path, if ommitted then ABAQS will translate genes data into aminoacids using provided gene translation table id (--gene-code)                                    
-  -g   --gene-code <arg>                            (optional), NCBI gene code id to be used for translation, if needed, default=1                                                                                                                        
-  -igc --gene-code-input-file <arg>                 (optional) gene code input file (gc.prt), if missing internal copy will be used, see --gene-code                                                                                                      
-  -ilr --reference-protein-lengths-input-file <arg> (optional) reference protein length distribution file, if missing internal reference will be used                                                                                                     
-  -io  --isoforms-min-overlap <arg>                 (optional) minimum overlap to detect genes isoforms by coding positions, default=0.25                                                                                                                 
-  -ise --suspected-te-input-file <arg>              (optional) suspected transposable elements pfam domains input file, if missing internal list will be used                                                                                             
-  -ite --te-input-file <arg>                        (optional) transposable elements pfam domains input file, if missing internal list will be used                                                                                                       
-  -mf  --masker-function <arg>                      (optional) masker function used to detect repeatmasled parts of scaffold sequence, used in TE computation, see --no-domain-masked-cutoff and --suspected-domain-masked-cutoff, default='TO_LOWER_CASE'
-  -ndc --no-domain-masked-cutoff <arg>              (optional) masked CDS cutoff for TE detection with no Pfam domains, NaN mean not used, default=0.2                                                                                                    
-  -o   --output <arg>                               (optional) path for the results file, default will print to the console                                                                                                                               
-  -fw  --fasta-width <arg>                          (optional output parameter) fasta output width, default=70. Used ONLY to produce fasta data embedded into the GFF3 output file, see --output-gff                                                      
-  -og  --output-gff <arg>                           (optional) gff3 or gtf output path, will produce POST-filtering gff or gtdf output file, type detected by the file extention                                                                          
-  -plb --protein-length-binning <arg>               (optional) protein length distribution binning, default=5                                                                                                                                             
-  -sdc --suspected-domain-masked-cutoff <arg>       (optional) masked CDS cutoff for TE detection with suspected TE Pfam domains, NaN mean always TE, default=NaN                                                                                         
-  -v   --verbose                                    (optional) produce verbose output                                                                                                                                                                     
-  -vo  --verbose-output-folder <arg>                (optional) output folder for verbose output, will save supplemental data during computation  in that folder
+-is input.softmasked.assembly.fasta
 ```
-## Basic calculation of ABAQS requires four pieces of data.
 
-1. \-is: The assembly fasta file. This should be softmasked using a repeatmasking program. Ideally, low-complexity repeats are ignored such as by running RepeatMasker with the \-nolow option.
-1. \-ig: Protein models in gff3 or gtf format. Each gene feature / protein must have a unique name and it is expected that the name is specified in the attributes field as proteinId. If some other field is used to name the protein, you can use the \-mg option to specify it. Here are a few lines from an example file.
+Gzipped FASTA (`.fasta.gz`) is accepted.
+
+### 2. Gene models (`-ig`) — required
+
+Gene and protein models in **GFF3 or GTF** format. The file type is detected automatically from the file extension (`.gff3`, `.gff`, `.gtf`). Gzipped files are supported.
+
+Each gene model must have a unique protein identifier. By default ABAQS uses the gene record's `ID` attribute. Example GFF3 lines:
+
 ```
 ##gff-version 3
-##sequence-region scaffold_1 1 1958655
-scaffold_1    fgenesh1_pg    gene    167    2008    0    +    .    ID=gene_2211;feature_name=fgenesh1_pg.1_#_1;Name=gene-jgi|Clapy1|1833732;portal_id=Clapy1;proteinId=1833732;transcriptId=1833838
-scaffold_1    fgenesh1_pg    mRNA    167    2008    .    +    .    ID=mRNA_2211;Parent=gene_2211;Name=jgi|Clapy1|1833732;product=expressed protein;proteinId=1833732;track=FilteredModels1;transcriptId=1833838
-scaffold_1    fgenesh1_pg    exon    167    169    .    +    .    ID=exon_12561;Parent=mRNA_2211
-scaffold_1    fgenesh1_pg    CDS    167    169    .    +    0    ID=CDS_12138;Parent=mRNA_2211
+scaffold_1  fgenesh1_pg  gene  167  2008  0  +  .  ID=gene_2211;proteinId=1833732;transcriptId=1833838
+scaffold_1  fgenesh1_pg  mRNA  167  2008  .  +  .  ID=mRNA_2211;Parent=gene_2211;proteinId=1833732
+scaffold_1  fgenesh1_pg  exon  167  169   .  +  .  ID=exon_12561;Parent=mRNA_2211
+scaffold_1  fgenesh1_pg  CDS   167  169   .  +  0  ID=CDS_12138;Parent=mRNA_2211
 ```
-1. \-ibf: BUSCO data file. This is usually called “short\_summary.txt” by default when BUSCO is run. Else, you can also provide the BUSCO summary using the \-ib option.  
-   Generally, you can run BUSCO using a command like:  
-   `busco -i proteins.fasta --auto-lineage-euk -o busco_output -m prot`  
-1. \-id: Pfam data for all the proteins. This is a tab separated text file where the proteinId (or whatever other attribute was specified for the gff3 file using the \-mg option) is in column 1 and a pfam domain associated with that protein is in one of the columns such that the immediately preceding column has the text ‘Pfam’.   
-   eg: Using InterProScan-5.78-109.0, you can run the command  
-   `interproscan.sh -i inout.proteins.fasta -f TSV -appl Pfam`  
-   And it will produce an output like
+
+If your GFF3 file uses a different attribute for the protein identifier (e.g. `proteinId`), specify it with `-mg 'attributes:proteinId:.*->{0}'`.
+
+### 3. BUSCO data (`-ib` or `-ibf`) — recommended
+
+BUSCO measures how many expected universal single-copy orthologs are present and complete in the proteome.
+
+**Option A — pass the summary string directly:**
+
 ```
-402418	2b03b8b3595baefa2f3a895a67a8f2a9	89	Pfam	PF11034	Glucose-repressible protein Grg1	19	87	5.0E-21	T	18-09-2026	IPR020100	Glucose-repressible protein Grg1	-	-`  
-441626	d5e71191dbd9b5da093aa60e64e17393	717	Pfam	PF00083	Sugar (and other) transporter	174	613	7.5E-104	T	18-09-2026	IPR005828	Major facilitator, sugar transporter-like	-	-`  
-429463	47008df6a8758c4a622f27615b9ed5be	814	Pfam	PF13374	Tetratricopeptide repeat	525	552	27.0	T	18-09-2026	-	-	-	-`  
-429463	47008df6a8758c4a622f27615b9ed5be	814	Pfam	PF13374	Tetratricopeptide repeat	721	751	0.013	T	18-09-2026	-	-	-	-`  
-429463	47008df6a8758c4a622f27615b9ed5be	814	Pfam	PF13374	Tetratricopeptide repeat	754	791	0.91	T	18-09-2026	-	-	-	-`  
-429463	47008df6a8758c4a622f27615b9ed5be	814	Pfam	PF13424	Tetratricopeptide repeat	638	710	3.9E-14	T	18-09-2026	-	-	-	-`  
-429463	47008df6a8758c4a622f27615b9ed5be	814	Pfam	PF13424	Tetratricopeptide repeat	560	627	2.0E-10	T	18-09-2026	-	-	-	-`  
-466084	97cde85c0dd806bd6fb831f06d6e528e	133	Pfam	PF04828	Glutathione-dependent formaldehyde-activating enzyme	4	116	1.0E-19	T	18-09-2026	IPR006913	CENP-V/GFA domain	-	-`
+-ib 'C:99.74%[S:91.16%,D:8.58%],F:0.26%,M:0.0%,n:758'
 ```
-   If any other format is used, it can be specified using the \-md option. Eg: If you use a two column file with the proteinId in column 1 and the pfam data in column 2, use \-md '(?\<id\>\\w+)\\t(?\<domain\>\\w+)'
 
-**Interpreting the results.**  
-After successful completion of the calculation, the software will provide the following data.
+Copy this string from your BUSCO `short_summary*.txt` output file.
 
-1. Total records:  This is the total number of features in the gff file.  
-1. Total genes:  Count of protein coding genes in the gff file.  
-1. Total scaffolds:  Number of records in the assembly fasta file.  
-1. Total proteins: This is the number of proteins. Ideally, it should be the same as “Total genes” in 2 above. See 10 below for why.  
-1. Total proteins with domains: This is the number of proteins with at least one pfam domain as provided in the pfam data file \[-id parameter\]. Generally, this number should be \>30% of the total number of genes. Else, either the pfam prediction was incomplete, or the file provided is not in the correct format. Use the \-md parameter to specify the input format of the pfam data file.  
-1. Total unique domains:  The number of unique pfams in the pfam data file provided.  
-1. Protein lengths distribution factor:  This is the PLD score where 1 is ideal and \>0.9 is very good. See the manuscript for how this is calculated. A low number here will significantly reduce the final ABAQS score.  
-1. Incomplete genes factor: The proportion of genes that have both a start and stop codon. A low number here will significantly reduce the final ABAQS.  
-1. Transposable elements factor: Proportion of TE genes retained in the predicted proteome. See the manuscript for how this is calculated. In short, these are identified using a curated list of known TE PFAM domains.   
-1. Isoforms factor:  The percentage of isoforms in the input data (gff file). This should ideally be zero \[See the underlying manuscript for why this is preferred\]. Coding sequences (CDSs) that overlap another CDS by more than 25% are classified as isoforms.  
-1. BUSCO duplicated factor: Estimation of genome duplication produced by BUSCO \[D/(1+D)\].  
-1. BUSCO complete factor:  Estimation of genome completeness estimated by BUSCO.  
-1. ABAQS score: Final ABAQS on a 0-1 scale.
+**Option B — pass the BUSCO output file:**
 
+```
+-ibf /path/to/short_summary.specific.fungi_odb10.txt
+```
 
+**Option C — let ABAQS run BUSCO automatically** (see [Automated Workflows](#automated-workflows) below).
 
-# Copyright Notice
+If BUSCO data is omitted, ABAQS assumes a perfect BUSCO score, which will overestimate the final ABAQS for incomplete assemblies.
 
-Accuracy-Based Annotation Quality Score (**ABAQS**) Copyright (c) 2025, The Regents of the University of California, 
-through Lawrence Berkeley National Laboratory (subject to receipt of any required approvals from the U.S. Dept. of Energy). All rights reserved.
+### 4. Pfam domain data (`-id`) — recommended
 
-If you have questions about your rights to use or distribute this software,
-please contact Berkeley Lab's Intellectual Property Office at
-IPO@lbl.gov.
+InterProScan Pfam predictions for all proteins. This is a tab-separated file produced by InterProScan with the `-appl Pfam` option.
 
-*NOTICE*.  This Software was developed under funding from the U.S. Department
-of Energy and the U.S. Government consequently retains certain rights.  As
-such, the U.S. Government has been granted for itself and others acting on
-its behalf a paid-up, nonexclusive, irrevocable, worldwide license in the
-Software to reproduce, distribute copies to the public, prepare derivative 
-works, and perform publicly and display publicly, and to permit others to do so.
+Run InterProScan:
+
+```bash
+interproscan.sh -i proteins.fasta -f TSV -appl Pfam
+```
+
+Example output (first few columns matter):
+
+```
+402418  2b03b8b...  89  Pfam  PF11034  Glucose-repressible protein Grg1  ...
+441626  d5e711...  717  Pfam  PF00083  Sugar transporter  ...
+```
+
+Pass to ABAQS:
+
+```
+-id proteins_interproscan.tsv
+```
+
+If omitted, ABAQS will skip Pfam-based TE detection.
+
+> **Tip:** At least 30% of proteins should have at least one Pfam domain. If fewer do, check that InterProScan completed successfully and that the correct format was used.
+
+**Option — let ABAQS run InterProScan automatically** (see [Automated Workflows](#automated-workflows) below).
+
+---
+
+## Workflows
+
+### Workflow 1 — Minimal run (BUSCO string, no InterProScan)
+
+Use when you have pre-computed BUSCO but do not have Pfam data. TE detection will be limited to masking-based inference.
+
+```bash
+java -jar /path/to/abaqs-jar-with-dependencies.jar \
+  -ig input.gff3 \
+  -is input.softmasked.assembly.fasta \
+  -ib 'C:99.74%[S:91.16%,D:8.58%],F:0.26%,M:0.0%,n:758'
+```
+
+Results are printed to the console. Add `-o results.txt` to save them.
+
+---
+
+### Workflow 2 — Standard run with Pfam data and BUSCO string
+
+This is the recommended workflow when you have pre-computed InterProScan output.
+
+```bash
+java -jar /path/to/abaqs-jar-with-dependencies.jar \
+  -ig input.gff3 \
+  -is input.softmasked.assembly.fasta \
+  -id proteins_interproscan.tsv \
+  -ib 'C:99.74%[S:91.16%,D:8.58%],F:0.26%,M:0.0%,n:758' \
+  -o abaqs_results.txt
+```
+
+---
+
+### Workflow 3 — Standard run with output proteins FASTA
+
+Adds `-op` to save the translated protein sequences for downstream use (e.g. running BUSCO or InterProScan yourself).
+
+```bash
+java -jar /path/to/abaqs-jar-with-dependencies.jar \
+  -ig input.gff3 \
+  -is input.softmasked.assembly.fasta \
+  -ib 'C:99.74%[S:91.16%,D:8.58%],F:0.26%,M:0.0%,n:758' \
+  --output-proteins-fasta abaqs_output/output.proteins.fasta
+```
+
+---
+
+### Workflow 4 — Automated run: ABAQS calls InterProScan and BUSCO
+
+ABAQS can run InterProScan and/or BUSCO automatically. Pass the command line (including any extra flags such as `--cpu`) using `-icl` and `-bcl`.
+
+**With automatic lineage detection:**
+
+```bash
+java -jar /path/to/abaqs-jar-with-dependencies.jar \
+  -ig input.gff3 \
+  -is input.softmasked.assembly.fasta \
+  -icl '/path/to/interproscan.sh --cpu 8' \
+  -bcl '/path/to/busco --cpu 8 --auto-lineage-euk' \
+  --output-proteins-fasta abaqs.output_proteins.fasta \
+  --working-dir /path/to/work_dir
+```
+
+**With a specific BUSCO lineage dataset (e.g. fungi):**
+
+```bash
+java -jar /path/to/abaqs-jar-with-dependencies.jar \
+  -ig input.gff3 \
+  -is input.softmasked.assembly.fasta \
+  -icl '/path/to/interproscan.sh --cpu 8' \
+  -bcl '/path/to/busco --cpu 8 --lineage_dataset fungi_odb10' \
+  --output-proteins-fasta abaqs.output_proteins.fasta \
+  --working-dir /path/to/work_dir
+```
+
+ABAQS creates a `working-dir/interpro/` and `working-dir/busco/` subdirectory for intermediate files. The working directory defaults to the current directory if `--working-dir` is not specified.
+
+---
+
+### Workflow 5 — Post-filtering GFF3 output
+
+To export a cleaned GFF3 file with TE models and isoforms removed, use `--output-gff`. The output type (GFF3 or GTF) is inferred from the file extension.
+
+```bash
+java -jar /path/to/abaqs-jar-with-dependencies.jar \
+  -ig input.gff3 \
+  -is input.softmasked.assembly.fasta \
+  -id proteins_interproscan.tsv \
+  -ib 'C:99.74%[S:91.16%,D:8.58%],F:0.26%,M:0.0%,n:758' \
+  --output-gff filtered_output.gff3 \
+  -o abaqs_results.txt
+```
+
+---
+
+### Workflow 6 — Verbose/diagnostic output
+
+Use `-v` to see detailed logging (isoform pairs, TE calls, protein translations). Add `-vo` to save supplemental TSV files (protein length bins, computation details) to a folder.
+
+```bash
+java -jar /path/to/abaqs-jar-with-dependencies.jar \
+  -ig input.gff3 \
+  -is input.softmasked.assembly.fasta \
+  -id proteins_interproscan.tsv \
+  -ib 'C:99.74%[S:91.16%,D:8.58%],F:0.26%,M:0.0%,n:758' \
+  -v \
+  -vo verbose_output/
+```
+
+---
+
+## All Options Reference
+
+### Required
+
+| Short | Long | Description |
+|-------|------|-------------|
+| `-ig` | `--input-gff` | Path to GFF3 or GTF file. Type detected by extension. Gzip supported. |
+
+### Recommended
+
+| Short | Long | Description |
+|-------|------|-------------|
+| `-is` | `--input-scaffolds-fasta` | Softmasked assembly FASTA. Required unless the GFF3 file embeds a `##FASTA` section. |
+| `-ib` | `--busco-data` | BUSCO summary string, e.g. `'C:99.3%[S:98.9%,D:0.4%],F:0.3%,M:0.4%,n:758'` |
+| `-ibf` | `--busco-data-file` | Path to BUSCO `short_summary*.txt` file |
+| `-id` | `--input-domains` | Path to InterProScan TSV file with Pfam domains |
+
+### Automated execution
+
+| Short | Long | Description |
+|-------|------|-------------|
+| `-icl` | `--interpro-command-line` | Command to run InterProScan. ABAQS appends `--applications Pfam --formats TSV` automatically. |
+| `-bcl` | `--busco-command-line` | Command to run BUSCO. ABAQS appends `--mode prot --in <proteins.fasta> --out <output> --force`. |
+| `-wd` | `--working-dir` | Working directory for intermediate files. Defaults to `.` |
+
+### Protein handling
+
+| Short | Long | Default | Description |
+|-------|------|---------|-------------|
+| `-ip` | `--input-proteins-fasta` | — | Pre-computed protein FASTA. If omitted, proteins are translated from the GFF3/assembly. |
+| `-op` | `--output-proteins-fasta` | — | Save the (translated or loaded) proteins to a FASTA file. |
+| `-g` | `--gene-code` | 1 | NCBI genetic code ID for translation. |
+| `-igc` | `--gene-code-input-file` | internal | Path to NCBI `gc.prt` file. |
+
+### ID mapping
+
+| Short | Long | Default | Description |
+|-------|------|---------|-------------|
+| `-mg` | `--gff3-protein-id-mapper` | `id:` | How to extract protein ID from GFF3 records. |
+| `-mp` | `--protein-fasta-protein-id-mapper` | `.+proteinId\s*=\s*(\d+).*->{1}` | How to extract protein ID from FASTA headers. |
+| `-md` | `--domains-protein-id-mapper` | Pfam TSV pattern | Regex (named groups `id` and `domain`) for parsing domain files. |
+
+### Scoring parameters
+
+| Short | Long | Default | Description |
+|-------|------|---------|-------------|
+| `-io` | `--isoforms-min-overlap` | 0.25 | Minimum CDS overlap fraction to classify two models as isoforms. |
+| `-ilr` | `--reference-protein-lengths-input-file` | internal | Reference protein length distribution for PLD factor. |
+| `-plb` | `--protein-length-binning` | 5 | Bin size for protein length distribution (in amino acids × 5 = aa bins). |
+
+### Transposable element detection
+
+| Short | Long | Default | Description |
+|-------|------|---------|-------------|
+| `-ite` | `--te-input-file` | internal | File of known TE Pfam domain IDs. |
+| `-ise` | `--suspected-te-input-file` | internal | File of suspected TE Pfam domain IDs. |
+| `-mf` | `--masker-function` | `TO_LOWER_CASE` | How repeat-masked positions are detected in the FASTA. |
+| `-ndc` | `--no-domain-masked-cutoff` | 0.2 | CDS masking fraction above which a domain-free gene is called a TE. |
+| `-sdc` | `--suspected-domain-masked-cutoff` | NaN (always TE) | CDS masking fraction above which a suspected-TE-domain gene is called a TE. |
+
+### Output
+
+| Short | Long | Default | Description |
+|-------|------|---------|-------------|
+| `-o` | `--output` | console | Path for the results file. |
+| `-og` | `--output-gff` | — | Output filtered GFF3 or GTF file. |
+| `-fw` | `--fasta-width` | 70 | Line width for FASTA sequences embedded in GFF3 output. |
+| `-v` | `--verbose` | false | Enable verbose logging. |
+| `-vo` | `--verbose-output-folder` | — | Folder to save supplemental TSV files. |
+
+---
+
+## Interpreting the Output
+
+ABAQS prints two blocks: **before filtering** and **after filtering** (TEs and non-longest isoforms removed).
+
+```
+ABAQS from input: 'input.gff3'
+before filtering
+
+Total records:                   <all lines in GFF file>
+Total genes:                     <protein-coding gene count>
+Total scaffolds:                 <scaffold count in assembly FASTA>
+Total proteins:                  <unique proteins analyzed>
+Total proteins with domains:     <proteins with ≥1 Pfam domain>
+Total unique domains:            <unique Pfam IDs observed>
+Protein lengths distribution factor:  0.9xyz
+Incomplete genes factor:              0.9xyz
+Transposable elements factor:         0.0xyz
+Isoforms count:                  N
+Isoforms factor:                      0.0xyz
+BUSCO duplicated factor:              0.0xyz
+BUSCO complete factor:                0.9xyz
+ABAQS score:                          0.9xyz
+
+ABAQS after filtering
+...
+```
+
+### Score interpretation
+
+| Metric | Ideal value | Notes |
+|--------|------------|-------|
+| Protein lengths distribution factor | ~1.0 (≥0.9 is very good) | Low values strongly penalize the final score |
+| Incomplete genes factor | ~1.0 | Fraction of genes with both start and stop codons |
+| Transposable elements factor | ~0.0 | Fraction of gene models classified as TEs |
+| Isoforms factor | ~0.0 | Fraction of gene models that are non-primary isoforms |
+| BUSCO duplicated factor | ~0.0 | D/(1+D); penalizes duplicated BUSCOs |
+| BUSCO complete factor | ~1.0 | Fraction of expected BUSCOs that are complete |
+| **ABAQS score** | **~1.0** | Final composite score; ≥0.9 is considered high quality |
+
+> If **Total proteins with domains** is less than 30% of Total proteins, the Pfam data may be incomplete or in an unexpected format. Verify your InterProScan output and use the `-md` option if necessary.
+
+> If **Total proteins** differs significantly from **Total genes**, this usually indicates isoforms in the input or a mismatch in protein ID mapping. Use `-v` to investigate.
+
+---
+
+## Tips and Troubleshooting
+
+**My GFF3 uses a non-standard protein ID attribute.**  
+Use `-mg 'attributes:proteinId:.*->{0}'` to pull from the `proteinId` attribute, or adapt the pattern to your attribute name.
+
+**My domain file uses a custom format.**  
+Use `-md` with a Java regex that captures named groups `id` (protein ID) and `domain` (Pfam accession). For a two-column file:  
+`-md '(?<id>\w+)\t(?<domain>\w+)'`
+
+**ABAQS reports many incomplete genes.**  
+This is common when gene models are predicted ab initio and may be truncated at scaffold boundaries. It will lower the incomplete-genes factor and the final ABAQS score, which is expected.
+
+**BUSCO duplication factor is high.**  
+This often indicates a partially collapsed assembly or retained heterozygosity. The BUSCO duplicated factor is computed as `D / (1 + D)`, so even moderate duplication has a noticeable effect.
+
+**I want to use a custom reference protein length distribution.**  
+Provide a two-column TSV (length, frequency) with `-ilr`. The internal reference was built from a large set of validated RefSeq proteins.
+
+**Running on an HPC cluster.**  
+When calling InterProScan or BUSCO via `-icl` / `-bcl`, make sure the commands are available in your `PATH` or specify full paths. The `--working-dir` flag controls where intermediate files are written, which should be on a writable filesystem.
+
+---
+
+## Copyright
+
+Accuracy-Based Annotation Quality Score (ABAQS) Copyright (c) 2025, The Regents of the University of California, through Lawrence Berkeley National Laboratory (subject to receipt of any required approvals from the U.S. Dept. of Energy). All rights reserved.
+
+Questions about rights to use or distribute this software: IPO@lbl.gov
+
+*NOTICE.* This Software was developed under funding from the U.S. Department of Energy and the U.S. Government consequently retains certain rights. As such, the U.S. Government has been granted for itself and others acting on its behalf a paid-up, nonexclusive, irrevocable, worldwide license in the Software to reproduce, distribute copies to the public, prepare derivative works, and perform publicly and display publicly, and to permit others to do so.
