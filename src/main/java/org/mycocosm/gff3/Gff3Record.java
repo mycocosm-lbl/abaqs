@@ -380,19 +380,21 @@ public class Gff3Record {
 	public TranslationResult getTranslatedAminoacidSequence(String scaffold, GeneCode code) {
 		final StringBuilder cds = new StringBuilder();
 //		System.out.printf("id:%s (%s) name:%s%n", id, strand.label, attributes.get("feature_name"));
+		final List<Integer> frames = new ArrayList<>();
 		getAllByPredicateInclusive(r->Gff3Type.CDS.equals(r.type)).stream().sorted(Gff3Record::sortByPositionOnly).forEach(cdsRec->{
-			
-			
+			frames.add(cdsRec.phase);
 			String cdsSeq = scaffold.substring(cdsRec.start-1, cdsRec.end);
 //			System.out.printf("scaffold:%s %d-%d ex:%s%n", scaffold.id,cdsRec.start,cdsRec.end,cdsSeq);
 			cds.append(cdsSeq);
 		});
 		String cdsEffective;
 		if (Strand.plus.equals(strand)) {
-			cdsEffective = cds.toString(); 
+			int firstFrame = frames.get(0);
+			cdsEffective = cds.toString().substring(firstFrame);
 //			System.out.printf("cds:%s%n",cds.toString());
 		} else {
-			cdsEffective = DnaHelper.complementSequence(cds.toString()); 
+			int firstFrame = frames.get(frames.size()-1);
+			cdsEffective = DnaHelper.complementSequence(cds.toString()).substring(firstFrame);
 //			System.out.printf("cds:%s%n",cds.toString());
 //			System.out.printf("cds eff:%s%n", cdsEffective);
 		}
