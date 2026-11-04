@@ -9,6 +9,8 @@ import java.net.SocketException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.attribute.BasicFileAttributes;
+import java.time.Duration;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
@@ -262,7 +264,8 @@ public class ABAQS implements BatchRunnableCli {
 			String buscoCommand
 			) throws IOException, InterruptedException {
 		LoggerHelper.log(logger, Level.INFO, "Starting ABAQS version '%s'",VERSION);
-
+		Instant started = Instant.now();
+		
 		if (verbose) {
 			showJava(logger);
 		}
@@ -442,7 +445,7 @@ public class ABAQS implements BatchRunnableCli {
 			resultsOutputWriter.format("ABAQS score:\t%.4f\n",scoreAfterFiltering.abaqsScore);
 		}
 
-		LoggerHelper.log(logger, Level.INFO, "All done");
+		LoggerHelper.log(logger, Level.INFO, "All done, time:%s",Duration.between(started, Instant.now()));
 	}
 
 
@@ -732,7 +735,7 @@ public class ABAQS implements BatchRunnableCli {
 
 		geneRecords.forEach((id,record)->{
 			if (record.protein!=null && record.protein.sequence.length()>0) {
-				if (!hasStartCodon(record) || !hasStopCodon(record)) {
+				if (isIncomplete(record)) {
 					incompleteGenesCount.increment();
 					if (verbose) LoggerHelper.log(logger, Level.INFO, "Incomplete gene: [%s]:'%s'", record.mRNA.id,record.protein.sequence);
 				}
@@ -742,13 +745,32 @@ public class ABAQS implements BatchRunnableCli {
 		return 1.0 - incompleteGenesCount.doubleValue() / (double) geneRecords.size();
 	}
 
-	private boolean hasStartCodon(GeneRecord record) {
-		return TextHelper.nullSafeCharAtWithPredicate(record.protein.sequence, 0, c->c=='M') || record.mRNA.children.stream().anyMatch(c->Gff3Type.start_codon.equals(c.type)); 
+	private boolean isIncomplete(GeneRecord record) {
+		if (record!=null) {
+			if (record.protein!=null && record.protein.sequence!=null) {
+				char[] protein = record.protein.sequence.toUpperCase().toCharArray();
+				if (protein[0]=='M' || record.mRNA.children.stream().anyMatch(c->Gff3Type.start_codon.equals(c.type))) { // has start codon
+					if (protein[protein.length-1]=='*' || record.mRNA.children.stream().anyMatch(c->Gff3Type.stop_codon.equals(c.type))) { // has stop codon
+						for (int index=1;index<protein.length-1;index++) {
+							if (protein[0]=='*') {
+								return true; // inner stop codon
+							}
+						}
+						return false; // is complete
+					} else {
+						return true; // no stop codon
+					}
+				} else {
+					return true; // no start codon
+				}
+			} else {
+				return true; // empty is incomplete
+			}
+		} else {
+			throw new NullPointerException("Gene record is null");
+		}
 	}
-	private boolean hasStopCodon(GeneRecord record) {
-		return TextHelper.nullSafeCharEndingPredicate(record.protein.sequence,c->c=='*') || record.mRNA.children.stream().anyMatch(c->Gff3Type.stop_codon.equals(c.type)); 
-	}
-
+	
 	//  short_summary.specific.hypocreaceae_odb12.busco_output_2.txt
 	private static final Pattern BUSCO_OUTPUT_FILTER = Pattern.compile("short_summary\\.specific\\..+\\.txt", Pattern.CASE_INSENSITIVE);
 	
@@ -760,10 +782,11 @@ public class ABAQS implements BatchRunnableCli {
 			LoggerHelper.log(logger, Level.INFO, "Loading BUSCO from file:'%s'",buscoDataFile);
 			return BuscoData.ofFile(buscoDataFile);
 		} else if (!TextHelper.isNullOrEmpty(buscoCommand)) {
+			Path buscoWorkingDir = workingDir.resolve("busco");
+			String translatedBuscoCommand = substituteWorkingDir(buscoCommand,buscoWorkingDir.toString());
 			// docker run --rm --user $(id -u):$(id -g) --volume $(pwd):/busco_wd --workdir /busco_wd ezlabgva/busco:v6.1.0_cv3 busco --auto-lineage-euk --cpu 12 --mode prot --in Clamy1_translated-proteins.fasta --out busco_output --force
 			List<String> command = new ArrayList<>();
-			TextHelper.splitAndParceToCollection(command, buscoCommand, PatternHelper.SPACE_LINE, s->s);
-			Path buscoWorkingDir = workingDir.resolve("busco");
+			TextHelper.splitAndParceToCollection(command, translatedBuscoCommand, PatternHelper.SPACE_LINE, s->s);
 			FilesHelper.createFolder(buscoWorkingDir);
 			Path buscoProteinFasta = buscoWorkingDir.resolve("busco-proteins.fasta");
 			dumpFasta(logger, proteins, buscoProteinFasta, fastaWidth, StopCodonsRemove.none);
@@ -801,6 +824,10 @@ public class ABAQS implements BatchRunnableCli {
 		}
 	}
 
+	private static final Pattern WORKING_DIR_SUBST = Pattern.compile("\\$[\\[\\{]working-dir[\\]\\}]",Pattern.CASE_INSENSITIVE);
+	private String substituteWorkingDir(String buscoCommand, String workingDir) {
+		return WORKING_DIR_SUBST.matcher(buscoCommand).replaceAll(workingDir);
+	}
 
 	// by each member of isoforms set 
 	private Map<GeneRecord /* longest protein */, Set<GeneRecord> /* excluding longestProtein */ > detectIsoforms(Logger logger, GFF3Data gff3Data, Map<String,GeneRecord> geneRecords, double isoformsMinimumOverlap, boolean verbose) {
@@ -1008,9 +1035,10 @@ public class ABAQS implements BatchRunnableCli {
 			
 			// ./interproscan-5.78-109.0/interproscan.sh --applications Pfam --input /scratch/abaqs/transposable-elements/Clamy1_translated-proteins.fasta --formats TSV --outfile Clamy1_pfam.tsv
 			List<String> command = new ArrayList<>();
-			TextHelper.splitAndParceToCollection(command, interproCommand, PatternHelper.SPACE_LINE, s->s);
-			CollectionsHelper.addAll(command, "--applications", "Pfam", "--formats", "TSV");
 			Path interproWorkingDir = workingDir.resolve("interpro");
+			String translatedInterproCommand = substituteWorkingDir(interproCommand, interproWorkingDir.toString());
+			TextHelper.splitAndParceToCollection(command, translatedInterproCommand, PatternHelper.SPACE_LINE, s->s);
+			CollectionsHelper.addAll(command, "--applications", "Pfam", "--formats", "TSV");
 			FilesHelper.createFolder(interproWorkingDir);
 			Path interproProteinFasta = interproWorkingDir.resolve("interpro-proteins.fasta");
 			dumpFasta(logger, proteins, interproProteinFasta, fastaWidth, StopCodonsRemove.all);
